@@ -284,4 +284,41 @@ class UptowareAutomationAndSecurityTest extends TestCase
         $this->assertEquals('body', $res['payload']['template']['components'][0]['type']);
         $this->assertCount(3, $res['payload']['template']['components'][0]['parameters']);
     }
+
+    public function test_razorpay_contact_normalization_and_error_description_surfacing(): void
+    {
+        FirmSetting::setValue('razorpay_enabled', '1', 'razorpay');
+        FirmSetting::setValue('razorpay_key_id', 'rzp_test_key', 'razorpay');
+        FirmSetting::setValue('razorpay_key_secret', 'rzp_test_secret', 'razorpay');
+
+        $admin = User::where('email', 'admin@uptoware.com')->firstOrFail();
+        $invoice = Invoice::firstOrFail();
+        $invoice->client->update(['mobile' => '98200-12345']);
+        $invoice->update([
+            'balance_amount' => 5000,
+            'total_amount' => 5000,
+            'paid_amount' => 0,
+            'status' => 'unpaid',
+            'razorpay_payment_link_id' => null,
+            'razorpay_payment_link_url' => null,
+        ]);
+
+        Http::fake([
+            'https://api.razorpay.com/v1/payment_links' => Http::response([
+                'error' => ['description' => 'The contact format is invalid for test mode'],
+            ], 400),
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('billing.razorpay.link', $invoice))
+            ->assertRedirect()
+            ->assertSessionHas('warning', 'Razorpay Error: The contact format is invalid for test mode');
+
+        Http::assertSent(function ($request) {
+            $data = $request->data();
+
+            return ($data['amount'] ?? null) === 500000
+                && ($data['customer']['contact'] ?? null) === '+919820012345';
+        });
+    }
 }

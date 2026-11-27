@@ -15,7 +15,14 @@ use Illuminate\Support\Facades\Log;
  */
 class BillingService
 {
+    private ?string $lastRazorpayError = null;
+
     public function __construct(private readonly ActivityLogger $logger) {}
+
+    public function getLastRazorpayError(): ?string
+    {
+        return $this->lastRazorpayError;
+    }
 
     public function generateInvoiceNumber(): string
     {
@@ -148,12 +155,18 @@ class BillingService
 
     public function createRazorpayPaymentLink(Invoice $invoice): ?string
     {
+        $this->lastRazorpayError = null;
         $cfg = FirmConfigService::razorpay();
         if (! $cfg['enabled'] || empty($cfg['key_id']) || empty($cfg['key_secret'])) {
+            $this->lastRazorpayError = 'Razorpay is disabled or API credentials are missing.';
+
             return null;
         }
 
-        if ((float) $invoice->balance_amount <= 0) {
+        $balance = (float) $invoice->balance_amount;
+        if ($balance <= 0) {
+            $this->lastRazorpayError = 'Invoice has no remaining balance.';
+
             return null;
         }
 
@@ -162,7 +175,14 @@ class BillingService
         }
 
         $invoice->loadMissing('client');
-        $amountPaise = (int) round(((float) $invoice->balance_amount) * 100);
+        $amountPaise = (int) round($balance * 100);
+        $contact = $this->normalizeRazorpayContact($invoice->client?->mobile);
+
+        $customer = array_filter([
+            'name' => $invoice->client?->name,
+            'email' => $invoice->client?->email,
+            'contact' => $contact,
+        ], fn ($v) => $v !== null && $v !== '');
 
         try {
             $response = Http::withBasicAuth((string) $cfg['key_id'], (string) $cfg['key_secret'])
@@ -173,11 +193,7 @@ class BillingService
                     'accept_partial' => false,
                     'reference_id' => $invoice->invoice_number,
                     'description' => "Invoice {$invoice->invoice_number} - ".($invoice->client?->name ?? 'Client'),
-                    'customer' => array_filter([
-                        'name' => $invoice->client?->name,
-                        'email' => $invoice->client?->email,
-                        'contact' => $invoice->client?->mobile,
-                    ]),
+                    'customer' => $customer,
                     'notify' => [
                         'sms' => false,
                         'email' => false,
@@ -200,13 +216,48 @@ class BillingService
                 return $shortUrl;
             }
 
-            Log::warning('Razorpay payment link creation failed', [
+            $errorDesc = $response->json('error.description')
+                ?? $response->json('error.reason')
+                ?? ('HTTP '.$response->status());
+
+            $this->lastRazorpayError = 'Razorpay Error: '.$errorDesc;
+
+            Log::error('Razorpay payment link creation failed', [
                 'invoice_id' => $invoice->id,
                 'status' => $response->status(),
-                'body' => $response->json(),
+                'body' => $response->body(),
             ]);
         } catch (\Throwable $e) {
-            Log::warning('Razorpay payment link exception', ['error' => $e->getMessage()]);
+            $this->lastRazorpayError = 'Razorpay Exception: '.$e->getMessage();
+
+            Log::error('Razorpay payment link exception', [
+                'invoice_id' => $invoice->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return null;
+    }
+
+    private function normalizeRazorpayContact(?string $rawPhone): ?string
+    {
+        if (empty($rawPhone)) {
+            return null;
+        }
+
+        $trimmed = trim($rawPhone);
+        $digits = preg_replace('/\D/', '', $trimmed) ?: '';
+
+        if (strlen($digits) === 10) {
+            return '+91'.$digits;
+        }
+
+        if (strlen($digits) === 12 && str_starts_with($digits, '91')) {
+            return '+'.$digits;
+        }
+
+        if (str_starts_with($trimmed, '+') && strlen($digits) >= 11 && strlen($digits) <= 15) {
+            return '+'.$digits;
         }
 
         return null;

@@ -181,7 +181,7 @@ class ClientPortalController extends Controller
 
         $url = $this->billingService->createRazorpayPaymentLink($invoice);
         if (! $url) {
-            return back()->with('warning', 'Online payment link is currently unavailable. Please contact your CA firm.');
+            return back()->with('warning', $this->billingService->getLastRazorpayError() ?? 'Online payment link is currently unavailable. Please contact your CA firm.');
         }
 
         return redirect()->away($url);

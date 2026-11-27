@@ -133,7 +133,7 @@ class BillingController extends Controller
 
         $url = $this->billingService->createRazorpayPaymentLink($invoice);
         if (! $url) {
-            return back()->with('warning', 'Unable to create Razorpay Payment Link. Check Razorpay settings.');
+            return back()->with('warning', $this->billingService->getLastRazorpayError() ?? 'Unable to create Razorpay Payment Link. Check Razorpay settings.');
         }
 
         return back()->with('success', 'Razorpay Payment Link generated.');

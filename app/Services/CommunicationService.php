@@ -47,7 +47,22 @@ class CommunicationService
                 $meta['error'] = 'Client email address is missing.';
             }
         } elseif ($channel === 'whatsapp') {
-            $result = $this->whatsApp->sendTextMessage((string) $client->mobile, $message);
+            if (! empty($data['template_name'])) {
+                $result = $this->whatsApp->sendTemplate(
+                    (string) $client->mobile,
+                    (string) $data['template_name'],
+                    $data['template_params'] ?? [],
+                    (string) ($data['template_language'] ?? 'en')
+                );
+                if ($result['status'] === 'failed') {
+                    $fallback = $this->whatsApp->sendTextMessage((string) $client->mobile, $message);
+                    if ($fallback['status'] === 'sent') {
+                        $result = $fallback;
+                    }
+                }
+            } else {
+                $result = $this->whatsApp->sendTextMessage((string) $client->mobile, $message);
+            }
             $status = $result['status'];
             $meta = [
                 'provider_message_id' => $result['provider_message_id'] ?? null,

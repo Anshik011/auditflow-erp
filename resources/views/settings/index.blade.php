@@ -60,7 +60,7 @@
                 <input class="form-check-input" type="checkbox" name="whatsapp_enabled" value="1" id="waEnabled" @checked(($settings['whatsapp_enabled'] ?? '0') === '1')>
                 <label class="form-check-label small" for="waEnabled">Enable WhatsApp Cloud API Dispatch</label>
             </div>
-            <div class="row g-2 mb-3">
+            <div class="row g-2 mb-2">
                 <div class="col-6">
                     <label class="form-label small fw-semibold">Phone Number ID</label>
                     <input type="text" name="whatsapp_phone_number_id" value="{{ $settings['whatsapp_phone_number_id'] ?? '' }}" class="form-control form-control-sm" placeholder="e.g. 123456789012345">
@@ -68,6 +68,24 @@
                 <div class="col-6">
                     <label class="form-label small fw-semibold">Access Token (Encrypted)</label>
                     <input type="password" name="whatsapp_access_token" class="form-control form-control-sm" placeholder="{{ !empty($settings['whatsapp_access_token']) ? '•••••••• (Saved)' : 'Paste permanent token' }}">
+                </div>
+            </div>
+            <div class="row g-2 mb-3">
+                <div class="col-4">
+                    <label class="form-label small fw-semibold">Compliance Template</label>
+                    <input type="text" name="whatsapp_template_compliance" value="{{ $settings['whatsapp_template_compliance'] ?? 'ca_compliance_reminder' }}" class="form-control form-control-sm" placeholder="ca_compliance_reminder">
+                </div>
+                <div class="col-4">
+                    <label class="form-label small fw-semibold">Document Template</label>
+                    <input type="text" name="whatsapp_template_document" value="{{ $settings['whatsapp_template_document'] ?? 'ca_document_reminder' }}" class="form-control form-control-sm" placeholder="ca_document_reminder">
+                </div>
+                <div class="col-3">
+                    <label class="form-label small fw-semibold">Invoice Template</label>
+                    <input type="text" name="whatsapp_template_invoice" value="{{ $settings['whatsapp_template_invoice'] ?? 'ca_invoice_reminder' }}" class="form-control form-control-sm" placeholder="ca_invoice_reminder">
+                </div>
+                <div class="col-1">
+                    <label class="form-label small fw-semibold">Lang</label>
+                    <input type="text" name="whatsapp_template_language" value="{{ $settings['whatsapp_template_language'] ?? 'en' }}" class="form-control form-control-sm" placeholder="en">
                 </div>
             </div>
 
@@ -137,10 +155,16 @@
             <h2 class="h6 fw-bold mb-3">Integration Diagnostics &amp; Live Tests</h2>
             <div class="row g-2">
                 <div class="col-md-12">
-                    <form action="{{ route('settings.test_whatsapp') }}" method="POST" class="d-flex gap-2">
+                    <form action="{{ route('settings.test_whatsapp') }}" method="POST">
                         @csrf
-                        <input type="text" name="test_phone" class="form-control form-control-sm" placeholder="+91 98200 11001" required>
-                        <button type="submit" class="btn btn-sm btn-outline-success text-nowrap"><i class="bi bi-whatsapp me-1"></i>Test WhatsApp</button>
+                        <div class="d-flex gap-2 mb-1">
+                            <input type="text" name="test_phone" class="form-control form-control-sm" placeholder="+91 98200 11001" required>
+                            <button type="submit" class="btn btn-sm btn-outline-success text-nowrap"><i class="bi bi-whatsapp me-1"></i>Test WhatsApp</button>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="use_hello_world" value="1" id="useHelloWorld" checked>
+                            <label class="form-check-label small text-muted" for="useHelloWorld">Use <code>hello_world</code> (<code>en_US</code>) template (recommended outside 24h window)</label>
+                        </div>
                     </form>
                 </div>
                 <div class="col-md-12">

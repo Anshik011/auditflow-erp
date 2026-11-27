@@ -10,6 +10,7 @@ use App\Models\Invoice;
 use App\Models\Task;
 use App\Models\User;
 use App\Services\BackupService;
+use App\Services\WhatsApp\WhatsAppProviderInterface;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -245,5 +246,42 @@ class UptowareAutomationAndSecurityTest extends TestCase
         ])->assertRedirect(route('login.2fa'));
 
         $this->assertGuest();
+    }
+
+    public function test_whatsapp_template_dispatch_and_settings_hello_world_test(): void
+    {
+        FirmSetting::setValue('whatsapp_enabled', '1', 'whatsapp');
+        FirmSetting::setValue('whatsapp_phone_number_id', '1234567890', 'whatsapp');
+        FirmSetting::setValue('whatsapp_access_token', 'wa_test_token', 'whatsapp');
+
+        Http::fake([
+            'https://graph.facebook.com/*' => Http::response([
+                'messages' => [['id' => 'wamid.test_123']],
+            ], 200),
+        ]);
+
+        $admin = User::where('email', 'admin@uptoware.com')->firstOrFail();
+
+        $this->actingAs($admin)
+            ->post(route('settings.test_whatsapp'), [
+                'test_phone' => '+919820011001',
+                'use_hello_world' => '1',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        Http::assertSent(function ($request) {
+            $data = $request->data();
+
+            return ($data['type'] ?? null) === 'template'
+                && ($data['template']['name'] ?? null) === 'hello_world'
+                && ($data['template']['language']['code'] ?? null) === 'en_US';
+        });
+
+        $wa = app(WhatsAppProviderInterface::class);
+        $res = $wa->sendTemplate('+919820011001', 'ca_compliance_reminder', ['Apex Corp', 'GSTR-3B', '20 Dec 2026'], 'en');
+        $this->assertEquals('sent', $res['status']);
+        $this->assertEquals('body', $res['payload']['template']['components'][0]['type']);
+        $this->assertCount(3, $res['payload']['template']['components'][0]['parameters']);
     }
 }

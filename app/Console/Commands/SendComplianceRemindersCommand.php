@@ -7,6 +7,7 @@ use App\Models\Document;
 use App\Models\Invoice;
 use App\Models\User;
 use App\Services\CommunicationService;
+use App\Services\FirmConfigService;
 use App\Services\WhatsApp\WhatsAppProviderInterface;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -24,6 +25,7 @@ class SendComplianceRemindersCommand extends Command
         $today = Carbon::today();
         $systemUserId = User::whereIn('role', [User::ROLE_SUPER_ADMIN, User::ROLE_PARTNER])->value('id') ?? 1;
         $waEnabled = $whatsApp->isConfigured();
+        $waTemplates = FirmConfigService::whatsapp()['templates'];
 
         // 1. Upcoming & Overdue Compliance Deadlines
         $deadlines = ComplianceDeadline::with(['client', 'rule'])
@@ -61,7 +63,18 @@ class SendComplianceRemindersCommand extends Command
                 $dispatched = true;
             }
             if ($waEnabled && ! empty($deadline->client->mobile) && $sentCount < $limit) {
-                $comm->send($deadline->client, ['channel' => 'whatsapp', 'subject' => $subject, 'message' => $message], $systemUserId);
+                $comm->send($deadline->client, [
+                    'channel' => 'whatsapp',
+                    'subject' => $subject,
+                    'message' => $message,
+                    'template_name' => $waTemplates['compliance'],
+                    'template_params' => [
+                        $deadline->client->name,
+                        $deadline->title,
+                        $deadline->due_date->format('d M Y'),
+                    ],
+                    'template_language' => $waTemplates['language'],
+                ], $systemUserId);
                 $sentCount++;
                 $dispatched = true;
             }
@@ -102,7 +115,18 @@ class SendComplianceRemindersCommand extends Command
                     $dispatched = true;
                 }
                 if ($waEnabled && ! empty($doc->client->mobile) && $sentCount < $limit) {
-                    $comm->send($doc->client, ['channel' => 'whatsapp', 'subject' => $subject, 'message' => $message], $systemUserId);
+                    $comm->send($doc->client, [
+                        'channel' => 'whatsapp',
+                        'subject' => $subject,
+                        'message' => $message,
+                        'template_name' => $waTemplates['document'],
+                        'template_params' => [
+                            $doc->client->name,
+                            $doc->title,
+                            $doc->due_date?->format('d M Y') ?? 'As soon as possible',
+                        ],
+                        'template_language' => $waTemplates['language'],
+                    ], $systemUserId);
                     $sentCount++;
                     $dispatched = true;
                 }
@@ -147,7 +171,19 @@ class SendComplianceRemindersCommand extends Command
                     $dispatched = true;
                 }
                 if ($waEnabled && ! empty($invoice->client->mobile) && $sentCount < $limit) {
-                    $comm->send($invoice->client, ['channel' => 'whatsapp', 'subject' => $subject, 'message' => $message], $systemUserId);
+                    $comm->send($invoice->client, [
+                        'channel' => 'whatsapp',
+                        'subject' => $subject,
+                        'message' => $message,
+                        'template_name' => $waTemplates['invoice'],
+                        'template_params' => [
+                            $invoice->client->name,
+                            $invoice->invoice_number,
+                            number_format((float) $invoice->balance_amount, 2),
+                            $invoice->razorpay_payment_link_url ?: $invoice->due_date->format('d M Y'),
+                        ],
+                        'template_language' => $waTemplates['language'],
+                    ], $systemUserId);
                     $sentCount++;
                     $dispatched = true;
                 }

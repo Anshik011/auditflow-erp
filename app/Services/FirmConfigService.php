@@ -24,6 +24,12 @@ class FirmConfigService
             'access_token' => ! empty($dbToken) ? $dbToken : config('services.whatsapp.access_token'),
             'api_version' => config('services.whatsapp.api_version', 'v20.0'),
             'base_url' => config('services.whatsapp.base_url', 'https://graph.facebook.com'),
+            'templates' => [
+                'compliance' => FirmSetting::getValue('whatsapp_template_compliance') ?: 'ca_compliance_reminder',
+                'document' => FirmSetting::getValue('whatsapp_template_document') ?: 'ca_document_reminder',
+                'invoice' => FirmSetting::getValue('whatsapp_template_invoice') ?: 'ca_invoice_reminder',
+                'language' => FirmSetting::getValue('whatsapp_template_language') ?: 'en',
+            ],
         ];
     }
 

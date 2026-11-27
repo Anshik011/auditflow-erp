@@ -72,6 +72,10 @@ class SettingController extends Controller
             'whatsapp_enabled' => ['nullable', 'boolean'],
             'whatsapp_phone_number_id' => ['nullable', 'string', 'max:100'],
             'whatsapp_access_token' => ['nullable', 'string', 'max:1000'],
+            'whatsapp_template_compliance' => ['nullable', 'string', 'max:100'],
+            'whatsapp_template_document' => ['nullable', 'string', 'max:100'],
+            'whatsapp_template_invoice' => ['nullable', 'string', 'max:100'],
+            'whatsapp_template_language' => ['nullable', 'string', 'max:20'],
 
             // SMTP
             'mail_host' => ['nullable', 'string', 'max:255'],
@@ -106,6 +110,10 @@ class SettingController extends Controller
         // Integration toggles
         FirmSetting::setValue('whatsapp_enabled', $request->boolean('whatsapp_enabled') ? '1' : '0', 'whatsapp');
         FirmSetting::setValue('whatsapp_phone_number_id', $validated['whatsapp_phone_number_id'] ?? null, 'whatsapp');
+        FirmSetting::setValue('whatsapp_template_compliance', ($validated['whatsapp_template_compliance'] ?? '') ?: 'ca_compliance_reminder', 'whatsapp');
+        FirmSetting::setValue('whatsapp_template_document', ($validated['whatsapp_template_document'] ?? '') ?: 'ca_document_reminder', 'whatsapp');
+        FirmSetting::setValue('whatsapp_template_invoice', ($validated['whatsapp_template_invoice'] ?? '') ?: 'ca_invoice_reminder', 'whatsapp');
+        FirmSetting::setValue('whatsapp_template_language', ($validated['whatsapp_template_language'] ?? '') ?: 'en', 'whatsapp');
 
         FirmSetting::setValue('mail_host', $validated['mail_host'] ?? null, 'mail');
         FirmSetting::setValue('mail_port', $validated['mail_port'] ?? '587', 'mail');
@@ -147,15 +155,27 @@ class SettingController extends Controller
 
         $validated = $request->validate([
             'test_phone' => ['required', 'string', 'max:30'],
+            'use_hello_world' => ['nullable', 'boolean'],
         ]);
 
-        $result = $this->whatsApp->sendTextMessage(
-            $validated['test_phone'],
-            'Test message from Uptoware Audit: Your Meta WhatsApp Cloud API integration is active.'
-        );
+        if ($request->boolean('use_hello_world', true)) {
+            $result = $this->whatsApp->sendTemplate($validated['test_phone'], 'hello_world', [], 'en_US');
+        } else {
+            $result = $this->whatsApp->sendTextMessage(
+                $validated['test_phone'],
+                'Test message from Uptoware Audit: Your Meta WhatsApp Cloud API integration is active.'
+            );
+
+            if ($result['status'] === 'failed') {
+                $fallback = $this->whatsApp->sendTemplate($validated['test_phone'], 'hello_world', [], 'en_US');
+                if ($fallback['status'] === 'sent') {
+                    return back()->with('success', 'WhatsApp test delivered via hello_world (en_US) template fallback.');
+                }
+            }
+        }
 
         if ($result['status'] === 'sent') {
-            return back()->with('success', 'WhatsApp test message sent successfully.');
+            return back()->with('success', 'WhatsApp test message sent successfully: '.$result['message']);
         }
 
         return back()->with('warning', 'WhatsApp test: '.$result['message']);

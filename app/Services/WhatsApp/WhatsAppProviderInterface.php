@@ -10,4 +10,10 @@ interface WhatsAppProviderInterface
      * @return array{status: string, provider_message_id?: string|null, message: string, payload?: array}
      */
     public function sendTextMessage(string $recipientPhone, string $message): array;
+
+    /**
+     * @param  array<int, string>  $bodyParams
+     * @return array{status: string, provider_message_id?: string|null, message: string, payload?: array}
+     */
+    public function sendTemplate(string $to, string $templateName, array $bodyParams = [], string $languageCode = 'en'): array;
 }

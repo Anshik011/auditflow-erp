@@ -23,8 +23,7 @@ class MetaWhatsAppCloudService implements WhatsAppProviderInterface
 
     public function sendTextMessage(string $recipientPhone, string $message): array
     {
-        $cfg = FirmConfigService::whatsapp();
-        $normalizedPhone = preg_replace('/[^\d+]/', '', $recipientPhone) ?: '';
+        $normalizedPhone = $this->normalizePhone($recipientPhone);
         $payload = [
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
@@ -36,6 +35,45 @@ class MetaWhatsAppCloudService implements WhatsAppProviderInterface
             ],
         ];
 
+        return $this->dispatchPayload($normalizedPhone, $payload, 'Dispatched via WhatsApp Business Cloud API.');
+    }
+
+    public function sendTemplate(string $to, string $templateName, array $bodyParams = [], string $languageCode = 'en'): array
+    {
+        $normalizedPhone = $this->normalizePhone($to);
+        $templatePayload = [
+            'name' => $templateName,
+            'language' => ['code' => $languageCode ?: 'en'],
+        ];
+
+        if (! empty($bodyParams)) {
+            $templatePayload['components'] = [[
+                'type' => 'body',
+                'parameters' => array_values(array_map(
+                    fn ($value) => ['type' => 'text', 'text' => (string) $value],
+                    $bodyParams
+                )),
+            ]];
+        }
+
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
+            'to' => ltrim($normalizedPhone, '+'),
+            'type' => 'template',
+            'template' => $templatePayload,
+        ];
+
+        return $this->dispatchPayload($normalizedPhone, $payload, "Dispatched template '{$templateName}' via WhatsApp Business Cloud API.");
+    }
+
+    private function normalizePhone(string $phone): string
+    {
+        return preg_replace('/[^\d+]/', '', $phone) ?: '';
+    }
+
+    private function dispatchPayload(string $normalizedPhone, array $payload, string $successMessage): array
+    {
         if (! $this->isConfigured()) {
             return [
                 'status' => 'not_configured',
@@ -54,6 +92,7 @@ class MetaWhatsAppCloudService implements WhatsAppProviderInterface
             ];
         }
 
+        $cfg = FirmConfigService::whatsapp();
         $endpoint = sprintf(
             '%s/%s/%s/messages',
             rtrim((string) $cfg['base_url'], '/'),
@@ -70,7 +109,7 @@ class MetaWhatsAppCloudService implements WhatsAppProviderInterface
                 return [
                     'status' => 'sent',
                     'provider_message_id' => $response->json('messages.0.id'),
-                    'message' => 'Dispatched via WhatsApp Business Cloud API.',
+                    'message' => $successMessage,
                     'payload' => $payload,
                 ];
             }

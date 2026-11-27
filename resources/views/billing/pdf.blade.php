@@ -21,10 +21,10 @@
 <table style="border: none; margin-top: 0;">
     <tr>
         <td style="border: none; padding: 0; vertical-align: top;">
-            <div class="firm-title">{{ $firm['firm_name'] ?? 'AuditFlow Accounting & Advisory' }}</div>
+            <div class="firm-title">{{ $firm['firm_name'] ?? 'Uptoware Audit & Advisory' }}</div>
             <div>{{ $firm['firm_address'] ?? 'Mumbai, Maharashtra' }}</div>
             <div>PAN: {{ $firm['firm_pan'] ?? '—' }} | GSTIN: {{ $firm['firm_gstin'] ?? '—' }}</div>
-            <div>Email: {{ $firm['firm_email'] ?? 'billing@auditflow.in' }} | Phone: {{ $firm['firm_phone'] ?? '—' }}</div>
+            <div>Email: {{ $firm['firm_email'] ?? 'billing@uptoware.com' }} | Phone: {{ $firm['firm_phone'] ?? '—' }}</div>
         </td>
         <td style="border: none; padding: 0; vertical-align: top; text-align: right;">
             <div class="inv-title">TAX INVOICE</div>
@@ -83,6 +83,13 @@
     <tr><td>Paid Amount</td><td class="text-end">INR {{ number_format((float) $invoice->paid_amount, 2) }}</td></tr>
     <tr><td><strong>Balance Due</strong></td><td class="text-end"><strong>INR {{ number_format((float) $invoice->balance_amount, 2) }}</strong></td></tr>
 </table>
+
+@if($invoice->razorpay_payment_link_url && (float) $invoice->balance_amount > 0)
+    <div style="margin-top: 16px; padding: 10px; background: #eff6ff; border: 1px solid #bfdbfe; font-size: 11px;">
+        <strong>Pay Online (UPI / NetBanking / Card):</strong>
+        <a href="{{ $invoice->razorpay_payment_link_url }}" style="color: #0284c7;">{{ $invoice->razorpay_payment_link_url }}</a>
+    </div>
+@endif
 
 @if($invoice->notes)
     <div style="margin-top: 20px; font-size: 11px; color: #475569;">

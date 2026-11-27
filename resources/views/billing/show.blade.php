@@ -22,7 +22,7 @@
         <div class="ca-card p-4 mb-3">
             <div class="row mb-4">
                 <div class="col-6">
-                    <div class="fw-bold" style="color: #1e3a5f;">{{ $firm['firm_name'] ?? 'AuditFlow Accounting & Advisory' }}</div>
+                    <div class="fw-bold" style="color: #1e3a5f;">{{ $firm['firm_name'] ?? 'Uptoware Audit & Advisory' }}</div>
                     <div class="small text-muted">{{ $firm['firm_address'] ?? 'Mumbai, Maharashtra' }}</div>
                     <div class="small text-muted">GSTIN: {{ $firm['firm_gstin'] ?? '—' }}</div>
                 </div>
@@ -75,11 +75,34 @@
     <div class="col-lg-4">
         @if((float) $invoice->balance_amount > 0)
             <div class="ca-card p-3 mb-3">
-                <h2 class="h6 fw-bold mb-3">Record Payment</h2>
+                <h2 class="h6 fw-bold mb-2"><i class="bi bi-credit-card me-1 text-primary"></i>Online UPI / Razorpay Link</h2>
+                @if($invoice->razorpay_payment_link_url)
+                    <div class="input-group input-group-sm mb-2">
+                        <input type="text" class="form-control" value="{{ $invoice->razorpay_payment_link_url }}" readonly>
+                        <a href="{{ $invoice->razorpay_payment_link_url }}" target="_blank" class="btn btn-outline-primary">Open</a>
+                    </div>
+                    <form action="{{ route('billing.razorpay.verify', $invoice) }}" method="POST">
+                        @csrf
+                        <button type="submit" class="btn btn-sm btn-outline-success w-100"><i class="bi bi-arrow-repeat me-1"></i>Verify Payment Status</button>
+                    </form>
+                @else
+                    <form action="{{ route('billing.razorpay.link', $invoice) }}" method="POST">
+                        @csrf
+                        <button type="submit" class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-link-45deg me-1"></i>Generate Razorpay Payment Link</button>
+                    </form>
+                @endif
+            </div>
+
+            <div class="ca-card p-3 mb-3">
+                <h2 class="h6 fw-bold mb-3">Record Payment &amp; TDS (194J)</h2>
                 <form action="{{ route('billing.payments.store', $invoice) }}" method="POST">
                     @csrf
                     <div class="mb-2"><label class="form-label small fw-semibold">Payment Date *</label><input type="date" name="payment_date" value="{{ now()->format('Y-m-d') }}" class="form-control form-control-sm" required></div>
-                    <div class="mb-2"><label class="form-label small fw-semibold">Amount (Max ₹{{ number_format((float) $invoice->balance_amount, 2) }}) *</label><input type="number" step="0.01" max="{{ $invoice->balance_amount }}" name="amount" value="{{ $invoice->balance_amount }}" class="form-control form-control-sm" required></div>
+                    <div class="mb-2"><label class="form-label small fw-semibold">Net Cash Received (Max ₹{{ number_format((float) $invoice->balance_amount, 2) }}) *</label><input type="number" step="0.01" min="0" max="{{ $invoice->balance_amount }}" name="amount" value="{{ $invoice->balance_amount }}" class="form-control form-control-sm" required></div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-7"><label class="form-label small fw-semibold">TDS Deducted (₹)</label><input type="number" step="0.01" min="0" name="tds_deducted" value="0" class="form-control form-control-sm"></div>
+                        <div class="col-5"><label class="form-label small fw-semibold">TDS Section</label><input type="text" name="tds_section" value="194J" class="form-control form-control-sm" placeholder="194J"></div>
+                    </div>
                     <div class="mb-2"><label class="form-label small fw-semibold">Payment Mode *</label><select name="payment_mode" class="form-select form-select-sm">@foreach(\App\Models\Payment::MODES as $k => $v)<option value="{{ $k }}">{{ $v }}</option>@endforeach</select></div>
                     <div class="mb-2"><label class="form-label small fw-semibold">Reference / UTR No.</label><input type="text" name="reference_number" class="form-control form-control-sm"></div>
                     <div class="mb-3"><label class="form-label small fw-semibold">Notes</label><input type="text" name="notes" class="form-control form-control-sm"></div>
@@ -93,7 +116,7 @@
             @forelse($invoice->payments as $pay)
                 <div class="border rounded p-2 mb-2 bg-light small">
                     <div class="d-flex justify-content-between fw-semibold">
-                        <span>₹{{ number_format((float) $pay->amount, 2) }}</span>
+                        <span>₹{{ number_format((float) $pay->amount, 2) }}@if((float) $pay->tds_deducted > 0) <span class="text-info">+ ₹{{ number_format((float) $pay->tds_deducted, 2) }} TDS ({{ $pay->tds_section ?? '194J' }})</span>@endif</span>
                         <span>{{ $pay->payment_date->format('d M Y') }}</span>
                     </div>
                     <div class="text-muted">{{ \App\Models\Payment::MODES[$pay->payment_mode] ?? $pay->payment_mode }} · Ref: {{ $pay->reference_number ?? '—' }}</div>

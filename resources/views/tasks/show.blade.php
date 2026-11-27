@@ -62,6 +62,51 @@
 
     <div class="col-lg-5">
         <div class="ca-card p-3 mb-3">
+            @php($totalMins = $task->timeLogs->sum('minutes'))
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h2 class="h6 fw-bold mb-0"><i class="bi bi-stopwatch me-1 text-primary"></i>Log Time &amp; Timesheet</h2>
+                <span class="badge badge-soft-primary">{{ floor($totalMins / 60) }}h {{ $totalMins % 60 }}m logged</span>
+            </div>
+            <form action="{{ route('tasks.time_logs.store', $task) }}" method="POST" class="row g-2 mb-3">
+                @csrf
+                <div class="col-4">
+                    <label class="form-label small mb-1">Minutes *</label>
+                    <input type="number" name="minutes" min="1" max="1440" value="30" class="form-control form-control-sm" required>
+                </div>
+                <div class="col-5">
+                    <label class="form-label small mb-1">Date *</label>
+                    <input type="date" name="logged_date" value="{{ now()->format('Y-m-d') }}" class="form-control form-control-sm" required>
+                </div>
+                <div class="col-3 d-flex align-items-end">
+                    <div class="form-check mb-1">
+                        <input class="form-check-input" type="checkbox" name="is_billable" value="1" id="chkBillable" checked>
+                        <label class="form-check-label small" for="chkBillable">Billable</label>
+                    </div>
+                </div>
+                <div class="col-8">
+                    <input type="text" name="notes" class="form-control form-control-sm" placeholder="Work notes (optional)">
+                </div>
+                <div class="col-4">
+                    <button type="submit" class="btn btn-sm btn-primary w-100">Log Time</button>
+                </div>
+            </form>
+            @forelse($task->timeLogs->take(5) as $tl)
+                <div class="d-flex justify-content-between align-items-center border-top py-1 small">
+                    <div>
+                        <span class="fw-semibold">{{ $tl->minutes }}m</span> · {{ $tl->user?->name ?? 'Staff' }}
+                        @if($tl->notes)<div class="text-muted" style="font-size: 0.72rem;">{{ $tl->notes }}</div>@endif
+                    </div>
+                    <div class="text-end">
+                        <span class="badge {{ $tl->is_billable ? 'badge-soft-success' : 'badge-soft-secondary' }}">{{ $tl->is_billable ? 'Billable' : 'Internal' }}</span>
+                        <div class="text-muted" style="font-size: 0.72rem;">{{ $tl->logged_date->format('d M') }}</div>
+                    </div>
+                </div>
+            @empty
+                <div class="text-muted small">No time logged yet.</div>
+            @endforelse
+        </div>
+
+        <div class="ca-card p-3 mb-3">
             <h2 class="h6 fw-bold mb-3">Attachments</h2>
             <form action="{{ route('tasks.attachments.store', $task) }}" method="POST" enctype="multipart/form-data" class="d-flex gap-2 mb-3">
                 @csrf

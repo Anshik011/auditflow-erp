@@ -41,6 +41,10 @@ class Invoice extends Model
         'balance_amount',
         'status',
         'notes',
+        'last_reminded_at',
+        'razorpay_payment_link_id',
+        'razorpay_payment_link_url',
+        'razorpay_payment_id',
         'created_by',
     ];
 
@@ -49,6 +53,7 @@ class Invoice extends Model
         return [
             'invoice_date' => 'date',
             'due_date' => 'date',
+            'last_reminded_at' => 'datetime',
             'subtotal' => 'decimal:2',
             'discount_amount' => 'decimal:2',
             'taxable_amount' => 'decimal:2',
@@ -91,24 +96,25 @@ class Invoice extends Model
 
     public function syncPaymentTotals(): void
     {
-        $paid = (float) $this->payments()->sum('amount');
+        $cashPaid = (float) $this->payments()->sum('amount');
+        $tdsPaid = (float) $this->payments()->sum('tds_deducted');
+        $settled = $cashPaid + $tdsPaid;
         $total = (float) $this->total_amount;
-        $balance = max(0, round($total - $paid, 2));
+        $balance = max(0, round($total - $settled, 2));
 
         if ($balance <= 0.01 && $total > 0) {
             $status = 'paid';
             $balance = 0;
-        } elseif ($paid > 0) {
+        } elseif ($settled > 0) {
             $status = ($this->due_date && $this->due_date->isPast()) ? 'overdue' : 'partially_paid';
         } else {
             $status = ($this->due_date && $this->due_date->isPast()) ? 'overdue' : 'unpaid';
         }
 
         $this->update([
-            'paid_amount' => $paid,
+            'paid_amount' => $settled,
             'balance_amount' => $balance,
             'status' => $status,
         ]);
     }
 }
-

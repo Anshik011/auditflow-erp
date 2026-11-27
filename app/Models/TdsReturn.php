@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class TdsReturn extends Model
 {
     public const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];
+
     public const FORM_TYPES = ['24Q', '26Q', '27Q', '27EQ'];
 
     public const STATUSES = [
@@ -62,4 +63,3 @@ class TdsReturn extends Model
         return self::STATUSES[$this->status] ?? ucfirst($this->status);
     }
 }
-

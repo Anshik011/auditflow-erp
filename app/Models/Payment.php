@@ -10,6 +10,7 @@ class Payment extends Model
     public const MODES = [
         'bank_transfer' => 'Bank Transfer (NEFT/RTGS/IMPS)',
         'upi' => 'UPI',
+        'razorpay' => 'Razorpay Online / UPI',
         'cheque' => 'Cheque',
         'cash' => 'Cash',
         'card' => 'Card',
@@ -20,6 +21,8 @@ class Payment extends Model
         'client_id',
         'payment_date',
         'amount',
+        'tds_deducted',
+        'tds_section',
         'payment_mode',
         'reference_number',
         'notes',
@@ -31,6 +34,7 @@ class Payment extends Model
         return [
             'payment_date' => 'date',
             'amount' => 'decimal:2',
+            'tds_deducted' => 'decimal:2',
         ];
     }
 
@@ -49,4 +53,3 @@ class Payment extends Model
         return $this->belongsTo(User::class, 'recorded_by');
     }
 }
-

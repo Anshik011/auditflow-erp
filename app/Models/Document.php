@@ -39,6 +39,7 @@ class Document extends Model
         'request_notes',
         'due_date',
         'is_shared_with_client',
+        'last_reminded_at',
         'current_version',
         'file_path',
         'original_filename',
@@ -52,6 +53,7 @@ class Document extends Model
             'reviewed_at' => 'datetime',
             'due_date' => 'date',
             'is_shared_with_client' => 'boolean',
+            'last_reminded_at' => 'datetime',
         ];
     }
 
@@ -106,4 +108,3 @@ class Document extends Model
         return $bytes.' B';
     }
 }
-

@@ -103,4 +103,3 @@ class Audit extends Model
         return (int) round(($done / count($items)) * 100);
     }
 }
-

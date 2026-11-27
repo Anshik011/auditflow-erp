@@ -93,7 +93,7 @@
         </div>
     </div>
 
-    @if($isExecutive)
+    @if(!empty($canViewFinancials))
         <div class="col-6 col-md-4 col-xl-3">
             <div class="card kpi-card h-100">
                 <div class="card-body">
@@ -112,7 +112,8 @@
                 </div>
             </div>
         </div>
-    @elseif($isEmployee)
+    @endif
+    @if($isEmployee)
         <div class="col-6 col-md-4 col-xl-3">
             <div class="card kpi-card h-100">
                 <div class="card-body">

@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Document;
 use App\Models\FirmSetting;
 use App\Models\Invoice;
+use App\Services\BillingService;
 use App\Services\ClientAccessService;
 use App\Services\CommunicationService;
 use App\Services\DocumentStorageService;
+use App\Services\FirmConfigService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,7 +24,8 @@ class ClientPortalController extends Controller
     public function __construct(
         private readonly ClientAccessService $clientAccess,
         private readonly DocumentStorageService $storageService,
-        private readonly CommunicationService $communicationService
+        private readonly CommunicationService $communicationService,
+        private readonly BillingService $billingService
     ) {}
 
     public function dashboard(Request $request): View
@@ -166,8 +169,32 @@ class ClientPortalController extends Controller
         $client = $this->clientAccess->resolveClientForPortalUser($request->user());
         $invoices = $client->invoices()->with('payments')->orderByDesc('invoice_date')->paginate(15);
         $outstandingBalance = $client->outstandingBalance();
+        $razorpayEnabled = (bool) FirmConfigService::razorpay()['enabled'];
 
-        return view('portal.invoices', compact('client', 'invoices', 'outstandingBalance'));
+        return view('portal.invoices', compact('client', 'invoices', 'outstandingBalance', 'razorpayEnabled'));
+    }
+
+    public function generatePaymentLink(Request $request, Invoice $invoice): RedirectResponse
+    {
+        $clientIds = $this->clientAccess->portalClientIds($request->user());
+        abort_unless($clientIds->contains((int) $invoice->client_id), 403);
+
+        $url = $this->billingService->createRazorpayPaymentLink($invoice);
+        if (! $url) {
+            return back()->with('warning', 'Online payment link is currently unavailable. Please contact your CA firm.');
+        }
+
+        return redirect()->away($url);
+    }
+
+    public function verifyInvoicePayment(Request $request, Invoice $invoice): RedirectResponse
+    {
+        $clientIds = $this->clientAccess->portalClientIds($request->user());
+        abort_unless($clientIds->contains((int) $invoice->client_id), 403);
+
+        $result = $this->billingService->verifyRazorpayPaymentLink($invoice);
+
+        return back()->with($result['paid'] ? 'success' : 'warning', $result['message']);
     }
 
     public function downloadInvoicePdf(Request $request, Invoice $invoice): Response

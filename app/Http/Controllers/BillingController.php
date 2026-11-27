@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use App\Models\FirmSetting;
 use App\Models\Invoice;
+use App\Models\Payment;
 use App\Services\BillingService;
 use App\Services\ClientAccessService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -102,15 +103,49 @@ class BillingController extends Controller
 
         $validated = $request->validate([
             'payment_date' => ['required', 'date'],
-            'amount' => ['required', 'numeric', 'min:0.01', 'max:'.max(0.01, (float) $invoice->balance_amount)],
-            'payment_mode' => ['required', Rule::in(array_keys(\App\Models\Payment::MODES))],
+            'amount' => ['required', 'numeric', 'min:0'],
+            'tds_deducted' => ['nullable', 'numeric', 'min:0'],
+            'tds_section' => ['nullable', 'string', 'max:20'],
+            'payment_mode' => ['required', Rule::in(array_keys(Payment::MODES))],
             'reference_number' => ['nullable', 'string', 'max:80'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
+        $cash = (float) $validated['amount'];
+        $tds = (float) ($validated['tds_deducted'] ?? 0);
+        $totalSettled = round($cash + $tds, 2);
+
+        if ($totalSettled <= 0) {
+            return back()->withErrors(['amount' => 'Cash received + TDS deducted must be greater than zero.']);
+        }
+        if ($totalSettled > round((float) $invoice->balance_amount + 0.01, 2)) {
+            return back()->withErrors(['amount' => 'Cash received + TDS deducted cannot exceed the invoice balance.']);
+        }
+
         $this->billingService->recordPayment($invoice, $validated, $request->user()->id);
 
         return back()->with('success', 'Payment recorded and invoice balance updated.');
+    }
+
+    public function generatePaymentLink(Request $request, Invoice $invoice): RedirectResponse
+    {
+        abort_unless($this->clientAccess->canAccessClient($request->user(), $invoice->client), 403);
+
+        $url = $this->billingService->createRazorpayPaymentLink($invoice);
+        if (! $url) {
+            return back()->with('warning', 'Unable to create Razorpay Payment Link. Check Razorpay settings.');
+        }
+
+        return back()->with('success', 'Razorpay Payment Link generated.');
+    }
+
+    public function verifyPaymentStatus(Request $request, Invoice $invoice): RedirectResponse
+    {
+        abort_unless($this->clientAccess->canAccessClient($request->user(), $invoice->client), 403);
+
+        $result = $this->billingService->verifyRazorpayPaymentLink($invoice);
+
+        return back()->with($result['paid'] ? 'success' : 'warning', $result['message']);
     }
 
     public function downloadPdf(Request $request, Invoice $invoice): Response
@@ -132,4 +167,3 @@ class BillingController extends Controller
         return redirect()->route('billing.index')->with('success', 'Invoice deleted.');
     }
 }
-

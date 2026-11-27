@@ -50,4 +50,3 @@ class Communication extends Model
         return self::CHANNELS[$this->channel] ?? ucfirst($this->channel);
     }
 }
-

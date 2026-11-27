@@ -5,7 +5,10 @@ namespace App\Services;
 use App\Models\FirmSetting;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Handles invoice creation, GST calculation (CGST+SGST / IGST), and payment recording.
@@ -118,6 +121,10 @@ class BillingService
                 'client_id' => $invoice->client_id,
                 'payment_date' => $data['payment_date'],
                 'amount' => $data['amount'],
+                'tds_deducted' => $data['tds_deducted'] ?? 0,
+                'tds_section' => ! empty($data['tds_deducted']) && (float) $data['tds_deducted'] > 0
+                    ? ($data['tds_section'] ?? '194J')
+                    : null,
                 'payment_mode' => $data['payment_mode'],
                 'reference_number' => $data['reference_number'] ?? null,
                 'notes' => $data['notes'] ?? null,
@@ -129,12 +136,139 @@ class BillingService
             $this->logger->log(
                 'billing',
                 'payment_recorded',
-                "Recorded payment of INR ".number_format((float) $payment->amount, 2)." against {$invoice->invoice_number}",
+                'Recorded payment of INR '.number_format((float) $payment->amount, 2)
+                .((float) $payment->tds_deducted > 0 ? ' + TDS INR '.number_format((float) $payment->tds_deducted, 2) : '')
+                ." against {$invoice->invoice_number}",
                 $invoice
             );
 
             return $payment;
         });
+    }
+
+    public function createRazorpayPaymentLink(Invoice $invoice): ?string
+    {
+        $cfg = FirmConfigService::razorpay();
+        if (! $cfg['enabled'] || empty($cfg['key_id']) || empty($cfg['key_secret'])) {
+            return null;
+        }
+
+        if ((float) $invoice->balance_amount <= 0) {
+            return null;
+        }
+
+        if (! empty($invoice->razorpay_payment_link_url)) {
+            return $invoice->razorpay_payment_link_url;
+        }
+
+        $invoice->loadMissing('client');
+        $amountPaise = (int) round(((float) $invoice->balance_amount) * 100);
+
+        try {
+            $response = Http::withBasicAuth((string) $cfg['key_id'], (string) $cfg['key_secret'])
+                ->timeout(12)
+                ->post('https://api.razorpay.com/v1/payment_links', [
+                    'amount' => $amountPaise,
+                    'currency' => 'INR',
+                    'accept_partial' => false,
+                    'reference_id' => $invoice->invoice_number,
+                    'description' => "Invoice {$invoice->invoice_number} - ".($invoice->client?->name ?? 'Client'),
+                    'customer' => array_filter([
+                        'name' => $invoice->client?->name,
+                        'email' => $invoice->client?->email,
+                        'contact' => $invoice->client?->mobile,
+                    ]),
+                    'notify' => [
+                        'sms' => false,
+                        'email' => false,
+                    ],
+                    'notes' => [
+                        'invoice_id' => (string) $invoice->id,
+                        'invoice_number' => $invoice->invoice_number,
+                    ],
+                ]);
+
+            if ($response->successful()) {
+                $linkId = $response->json('id');
+                $shortUrl = $response->json('short_url');
+
+                $invoice->update([
+                    'razorpay_payment_link_id' => $linkId,
+                    'razorpay_payment_link_url' => $shortUrl,
+                ]);
+
+                return $shortUrl;
+            }
+
+            Log::warning('Razorpay payment link creation failed', [
+                'invoice_id' => $invoice->id,
+                'status' => $response->status(),
+                'body' => $response->json(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Razorpay payment link exception', ['error' => $e->getMessage()]);
+        }
+
+        return null;
+    }
+
+    public function verifyRazorpayPaymentLink(Invoice $invoice): array
+    {
+        $cfg = FirmConfigService::razorpay();
+        if (empty($cfg['key_id']) || empty($cfg['key_secret'])) {
+            return ['paid' => false, 'message' => 'Razorpay credentials are not configured.'];
+        }
+
+        if (empty($invoice->razorpay_payment_link_id)) {
+            return ['paid' => false, 'message' => 'No Razorpay payment link has been generated for this invoice yet.'];
+        }
+
+        try {
+            $response = Http::withBasicAuth((string) $cfg['key_id'], (string) $cfg['key_secret'])
+                ->timeout(12)
+                ->get("https://api.razorpay.com/v1/payment_links/{$invoice->razorpay_payment_link_id}");
+
+            if (! $response->successful()) {
+                return ['paid' => false, 'message' => 'Razorpay API returned HTTP '.$response->status()];
+            }
+
+            $status = $response->json('status');
+            if ($status === 'paid') {
+                $amountPaid = ((float) ($response->json('amount_paid') ?: $response->json('amount'))) / 100;
+                $payments = $response->json('payments') ?? [];
+                $paymentId = $payments[0]['payment_id'] ?? $invoice->razorpay_payment_link_id;
+
+                $this->recordRazorpayPayment($invoice, (string) $paymentId, $amountPaid);
+
+                return ['paid' => true, 'message' => 'Payment verified and recorded successfully.'];
+            }
+
+            return ['paid' => false, 'message' => 'Payment link status is currently: '.ucfirst((string) $status).'.'];
+        } catch (\Throwable $e) {
+            return ['paid' => false, 'message' => 'Verification error: '.$e->getMessage()];
+        }
+    }
+
+    public function recordRazorpayPayment(Invoice $invoice, string $razorpayPaymentId, float $amountPaid): ?Payment
+    {
+        if ($invoice->razorpay_payment_id === $razorpayPaymentId ||
+            Payment::where('invoice_id', $invoice->id)->where('reference_number', $razorpayPaymentId)->exists()) {
+            return null;
+        }
+
+        $systemUserId = User::whereIn('role', [User::ROLE_SUPER_ADMIN, User::ROLE_PARTNER])->value('id') ?? 1;
+
+        $payment = $this->recordPayment($invoice, [
+            'payment_date' => now()->toDateString(),
+            'amount' => min($amountPaid, (float) $invoice->balance_amount ?: $amountPaid),
+            'payment_mode' => 'razorpay',
+            'reference_number' => $razorpayPaymentId,
+            'notes' => 'Online payment via Razorpay Payment Link',
+        ], $systemUserId);
+
+        $invoice->update(['razorpay_payment_id' => $razorpayPaymentId]);
+
+        return $payment;
     }
 
     private function calculateTotals(array $items, array $data): array
@@ -201,4 +335,3 @@ class BillingService
         ];
     }
 }
-

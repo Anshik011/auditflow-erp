@@ -29,4 +29,3 @@ class GstReturnType extends Model
         return $this->hasMany(GstReturn::class, 'return_type_id');
     }
 }
-

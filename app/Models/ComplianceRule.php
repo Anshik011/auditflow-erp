@@ -31,4 +31,3 @@ class ComplianceRule extends Model
         return $this->hasMany(ComplianceDeadline::class);
     }
 }
-

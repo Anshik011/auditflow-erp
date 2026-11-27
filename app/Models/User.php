@@ -16,9 +16,13 @@ class User extends Authenticatable
     use HasFactory, Notifiable;
 
     public const ROLE_SUPER_ADMIN = 'super_admin';
+
     public const ROLE_PARTNER = 'partner';
+
     public const ROLE_MANAGER = 'manager';
+
     public const ROLE_EMPLOYEE = 'employee';
+
     public const ROLE_CLIENT = 'client';
 
     public const ROLES = [
@@ -46,12 +50,16 @@ class User extends Authenticatable
         'designation',
         'department',
         'is_active',
+        'two_factor_enabled',
+        'two_factor_code',
+        'two_factor_expires_at',
         'avatar_color',
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
+        'two_factor_code',
     ];
 
     protected function casts(): array
@@ -60,6 +68,8 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'two_factor_enabled' => 'boolean',
+            'two_factor_expires_at' => 'datetime',
         ];
     }
 
@@ -151,6 +161,11 @@ class User extends Authenticatable
     public function activityLogs(): HasMany
     {
         return $this->hasMany(ActivityLog::class);
+    }
+
+    public function timeLogs(): HasMany
+    {
+        return $this->hasMany(TaskTimeLog::class);
     }
 
     public function scopeStaff($query)

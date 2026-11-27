@@ -8,10 +8,29 @@
         <h1 class="h4 fw-bold mb-1" style="color: #1e3a5f;">Client Management CRM</h1>
         <p class="text-muted small mb-0">Central directory of individual and business clients, tax registrations, and relationship managers.</p>
     </div>
-    <a href="{{ route('clients.create') }}" class="btn btn-primary btn-sm">
-        <i class="bi bi-building-add me-1"></i>Add Client
-    </a>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#importCsvModal">
+            <i class="bi bi-file-earmark-arrow-up me-1"></i>Bulk Import CSV
+        </button>
+        <a href="{{ route('clients.create') }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-building-add me-1"></i>Add Client
+        </a>
+    </div>
 </div>
+
+@if(session('import_summary'))
+    @php($summary = session('import_summary'))
+    <div class="ca-card p-3 mb-3 border-start border-4 border-info">
+        <div class="fw-bold small mb-1">CSV Import Summary: {{ $summary['imported'] }} imported, {{ count($summary['errors']) }} skipped</div>
+        @if(!empty($summary['errors']))
+            <ul class="mb-0 small text-danger">
+                @foreach($summary['errors'] as $err)
+                    <li>{{ $err }}</li>
+                @endforeach
+            </ul>
+        @endif
+    </div>
+@endif
 
 <div class="ca-card p-3 mb-3">
     <form method="GET" action="{{ route('clients.index') }}" class="row g-2 align-items-end">
@@ -100,6 +119,35 @@
     @if($clients->hasPages())
         <div class="p-3 border-top">{{ $clients->links() }}</div>
     @endif
+</div>
+
+<!-- Bulk Import CSV Modal -->
+<div class="modal fade" id="importCsvModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form action="{{ route('clients.import') }}" method="POST" enctype="multipart/form-data" class="modal-content">
+            @csrf
+            <div class="modal-header">
+                <h5 class="modal-title h6 fw-bold">Bulk Import Clients via CSV</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted">Upload a UTF-8 CSV file with columns: <code>Name, Code, Category, Email, Mobile, PAN, GSTIN, TAN, CIN, Assigned CA, GST, ITR, TDS, Is Recurring Retainer, Retainer Amount, Billing Cycle</code>.</p>
+                <div class="mb-3">
+                    <a href="{{ route('clients.import.template') }}" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-download me-1"></i>Download Sample CSV Template
+                    </a>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold">Select CSV File *</label>
+                    <input type="file" name="csv_file" accept=".csv,.txt" class="form-control form-control-sm" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-upload me-1"></i>Import Clients</button>
+            </div>
+        </form>
+    </div>
 </div>
 @endsection
 

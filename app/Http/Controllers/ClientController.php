@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ClientController extends Controller
 {
@@ -89,6 +90,9 @@ class ClientController extends Controller
                 'is_gst_registered' => $request->boolean('is_gst_registered'),
                 'is_itr_applicable' => $request->boolean('is_itr_applicable'),
                 'is_tds_applicable' => $request->boolean('is_tds_applicable'),
+                'is_recurring_retainer' => $request->boolean('is_recurring_retainer'),
+                'retainer_amount' => $validated['retainer_amount'] ?? 0,
+                'billing_cycle' => $validated['billing_cycle'] ?? 'none',
             ]);
 
             if (! empty($request->input('staff_ids'))) {
@@ -149,6 +153,9 @@ class ClientController extends Controller
                 'is_gst_registered' => $request->boolean('is_gst_registered'),
                 'is_itr_applicable' => $request->boolean('is_itr_applicable'),
                 'is_tds_applicable' => $request->boolean('is_tds_applicable'),
+                'is_recurring_retainer' => $request->boolean('is_recurring_retainer'),
+                'retainer_amount' => $validated['retainer_amount'] ?? 0,
+                'billing_cycle' => $validated['billing_cycle'] ?? 'none',
             ]);
 
             $client->staff()->sync($request->input('staff_ids', []));
@@ -186,6 +193,137 @@ class ClientController extends Controller
         return redirect()->route('clients.index')->with('success', "Client {$name} archived.");
     }
 
+    public function downloadImportTemplate(): StreamedResponse
+    {
+        return response()->streamDownload(function () {
+            $handle = fopen('php://output', 'w');
+            fwrite($handle, "\xEF\xBB\xBF");
+            fputcsv($handle, [
+                'Name', 'Code', 'Category', 'Email', 'Mobile', 'PAN', 'GSTIN', 'TAN', 'CIN',
+                'Assigned CA', 'GST', 'ITR', 'TDS', 'Is Recurring Retainer', 'Retainer Amount', 'Billing Cycle',
+            ]);
+            fputcsv($handle, [
+                'Apex Precision Components Pvt Ltd', '', 'business', 'accounts@apexpc.in', '+91 9820012345',
+                'AABCA1234E', '27AABCA1234E1Z5', 'MUMM12345A', 'U29100MH2020PTC123456',
+                'admin@uptoware.com', '1', '1', '1', '1', '15000', 'monthly',
+            ]);
+            fputcsv($handle, [
+                'Rohan Sharma', '', 'individual', 'rohan.sharma@example.com', '+91 9811122334',
+                'BGPPS4321K', '', '', '', '', '0', '1', '0', '0', '0', 'none',
+            ]);
+            fclose($handle);
+        }, 'clients_import_template.csv', [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    public function importCsv(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'csv_file' => ['required', 'file', 'mimes:csv,txt', 'max:5120'],
+        ]);
+
+        $path = $request->file('csv_file')->getRealPath();
+        $handle = fopen($path, 'r');
+        if (! $handle) {
+            return back()->withErrors(['csv_file' => 'Unable to read uploaded CSV file.']);
+        }
+
+        $headerRow = fgetcsv($handle);
+        if (! $headerRow) {
+            fclose($handle);
+
+            return back()->withErrors(['csv_file' => 'CSV file is empty.']);
+        }
+
+        // Strip UTF-8 BOM from first header cell if present
+        $headerRow[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string) $headerRow[0]);
+        $headers = array_map(fn ($h) => strtolower(trim((string) $h)), $headerRow);
+
+        $staffList = User::staff()->get();
+        $imported = 0;
+        $errors = [];
+        $rowNumber = 1;
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $rowNumber++;
+            if (count(array_filter($row, fn ($v) => trim((string) $v) !== '')) === 0) {
+                continue;
+            }
+
+            $assoc = [];
+            foreach ($headers as $idx => $key) {
+                $assoc[$key] = trim((string) ($row[$idx] ?? ''));
+            }
+
+            $name = $assoc['name'] ?? '';
+            if ($name === '') {
+                $errors[] = "Row {$rowNumber}: Name is required.";
+
+                continue;
+            }
+
+            $category = strtolower($assoc['category'] ?? 'business');
+            if (! array_key_exists($category, Client::CATEGORIES)) {
+                $category = 'business';
+            }
+
+            $code = $assoc['code'] ?? '';
+            if ($code !== '' && Client::withTrashed()->where('client_code', $code)->exists()) {
+                $errors[] = "Row {$rowNumber} ({$name}): Client code '{$code}' already exists.";
+
+                continue;
+            }
+
+            $assignedCaId = null;
+            $caRef = $assoc['assigned ca'] ?? ($assoc['assigned_ca'] ?? '');
+            if ($caRef !== '') {
+                $matched = $staffList->first(fn ($u) => strcasecmp($u->email, $caRef) === 0 || strcasecmp($u->name, $caRef) === 0);
+                $assignedCaId = $matched?->id;
+            }
+
+            $toBool = fn (string $val, bool $default = false): bool => $val === ''
+                ? $default
+                : in_array(strtolower($val), ['1', 'true', 'yes', 'y'], true);
+
+            $billingCycle = strtolower($assoc['billing cycle'] ?? ($assoc['billing_cycle'] ?? 'none'));
+            if (! array_key_exists($billingCycle, Client::BILLING_CYCLES)) {
+                $billingCycle = 'none';
+            }
+
+            Client::create([
+                'client_code' => $code !== '' ? $code : $this->generateClientCode(),
+                'name' => $name,
+                'category' => $category,
+                'email' => ($assoc['email'] ?? '') !== '' ? $assoc['email'] : null,
+                'mobile' => ($assoc['mobile'] ?? '') !== '' ? $assoc['mobile'] : null,
+                'pan' => ($assoc['pan'] ?? '') !== '' ? strtoupper($assoc['pan']) : null,
+                'gstin' => ($assoc['gstin'] ?? '') !== '' ? strtoupper($assoc['gstin']) : null,
+                'tan' => ($assoc['tan'] ?? '') !== '' ? strtoupper($assoc['tan']) : null,
+                'cin' => ($assoc['cin'] ?? '') !== '' ? strtoupper($assoc['cin']) : null,
+                'assigned_ca_id' => $assignedCaId,
+                'status' => 'active',
+                'is_gst_registered' => $toBool($assoc['gst'] ?? '', false),
+                'is_itr_applicable' => $toBool($assoc['itr'] ?? '', true),
+                'is_tds_applicable' => $toBool($assoc['tds'] ?? '', false),
+                'is_recurring_retainer' => $toBool($assoc['is recurring retainer'] ?? ($assoc['is_recurring_retainer'] ?? ''), false),
+                'retainer_amount' => is_numeric($assoc['retainer amount'] ?? ($assoc['retainer_amount'] ?? '')) ? (float) ($assoc['retainer amount'] ?? $assoc['retainer_amount']) : 0,
+                'billing_cycle' => $billingCycle,
+            ]);
+
+            $imported++;
+        }
+
+        fclose($handle);
+
+        $this->logger->log('clients', 'bulk_import', "Imported {$imported} clients via CSV ({$rowNumber} rows scanned).");
+
+        return back()->with('import_summary', [
+            'imported' => $imported,
+            'errors' => $errors,
+        ])->with('success', "CSV import completed: {$imported} client(s) added.");
+    }
+
     private function validateClient(Request $request, ?Client $client = null): array
     {
         return $request->validate([
@@ -214,6 +352,9 @@ class ClientController extends Controller
             'assigned_ca_id' => ['nullable', 'exists:users,id'],
             'registration_date' => ['nullable', 'date'],
             'status' => ['required', Rule::in(array_keys(Client::STATUSES))],
+            'is_recurring_retainer' => ['nullable', 'boolean'],
+            'retainer_amount' => ['nullable', 'numeric', 'min:0'],
+            'billing_cycle' => ['nullable', Rule::in(array_keys(Client::BILLING_CYCLES))],
             'notes' => ['nullable', 'string', 'max:5000'],
         ]);
     }

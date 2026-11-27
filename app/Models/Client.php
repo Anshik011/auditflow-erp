@@ -23,6 +23,12 @@ class Client extends Model
         'inactive' => 'Inactive',
     ];
 
+    public const BILLING_CYCLES = [
+        'none' => 'None (Ad-hoc)',
+        'monthly' => 'Monthly Retainer',
+        'quarterly' => 'Quarterly Retainer',
+    ];
+
     protected $fillable = [
         'client_code',
         'user_id',
@@ -46,6 +52,9 @@ class Client extends Model
         'is_gst_registered',
         'is_itr_applicable',
         'is_tds_applicable',
+        'is_recurring_retainer',
+        'retainer_amount',
+        'billing_cycle',
         'notes',
     ];
 
@@ -56,6 +65,8 @@ class Client extends Model
             'is_gst_registered' => 'boolean',
             'is_itr_applicable' => 'boolean',
             'is_tds_applicable' => 'boolean',
+            'is_recurring_retainer' => 'boolean',
+            'retainer_amount' => 'decimal:2',
         ];
     }
 
@@ -133,4 +144,3 @@ class Client extends Model
             ->sum('balance_amount');
     }
 }
-

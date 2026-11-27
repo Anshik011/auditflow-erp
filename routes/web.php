@@ -6,11 +6,13 @@ use App\Http\Controllers\BillingController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\CommunicationController;
 use App\Http\Controllers\ComplianceDeadlineController;
+use App\Http\Controllers\CronController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\GstReturnController;
 use App\Http\Controllers\ItrFilingController;
 use App\Http\Controllers\Portal\ClientPortalController;
+use App\Http\Controllers\RazorpayWebhookController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\StaffController;
@@ -18,11 +20,18 @@ use App\Http\Controllers\TaskController;
 use App\Http\Controllers\TdsReturnController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', fn () => redirect()->route('login'));
+Route::view('/', 'welcome')->name('home');
 
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.submit');
+Route::get('/login/2fa', [AuthController::class, 'showTwoFactor'])->name('login.2fa');
+Route::post('/login/2fa', [AuthController::class, 'verifyTwoFactor'])->name('login.2fa.verify');
+Route::post('/login/2fa/resend', [AuthController::class, 'resendTwoFactor'])->name('login.2fa.resend');
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->name('logout');
+
+// Shared-Hosting Web Cron & Payment Webhooks
+Route::get('/cron/run', [CronController::class, 'run'])->name('cron.run');
+Route::post('/webhooks/razorpay', [RazorpayWebhookController::class, 'handle'])->name('webhooks.razorpay');
 
 Route::middleware('auth')->group(function () {
     Route::post('/notifications/{id}/read', [DashboardController::class, 'markNotificationRead'])->name('notifications.read');
@@ -34,7 +43,9 @@ Route::middleware(['auth', 'role:super_admin,partner,manager,employee'])->group(
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/search', [DashboardController::class, 'search'])->name('global.search');
 
-    // Clients CRM
+    // Clients CRM & Bulk CSV Import
+    Route::get('/clients/import/template', [ClientController::class, 'downloadImportTemplate'])->name('clients.import.template');
+    Route::post('/clients/import', [ClientController::class, 'importCsv'])->name('clients.import');
     Route::resource('clients', ClientController::class);
 
     // GST Compliance
@@ -82,14 +93,18 @@ Route::middleware(['auth', 'role:super_admin,partner,manager,employee'])->group(
     Route::post('/audits/{audit}/working-papers', [AuditController::class, 'uploadWorkingPaper'])->name('audits.papers.store');
     Route::get('/audits/{audit}/working-papers/{paper}/download', [AuditController::class, 'downloadWorkingPaper'])->name('audits.papers.download');
 
-    // Billing & Payments
-    Route::get('/billing', [BillingController::class, 'index'])->name('billing.index');
-    Route::get('/billing/create', [BillingController::class, 'create'])->name('billing.create');
-    Route::post('/billing', [BillingController::class, 'store'])->name('billing.store');
-    Route::get('/billing/{invoice}', [BillingController::class, 'show'])->name('billing.show');
-    Route::post('/billing/{invoice}/payments', [BillingController::class, 'recordPayment'])->name('billing.payments.store');
-    Route::get('/billing/{invoice}/pdf', [BillingController::class, 'downloadPdf'])->name('billing.pdf');
-    Route::delete('/billing/{invoice}', [BillingController::class, 'destroy'])->name('billing.destroy');
+    // Billing & Payments (Restricted from employee role)
+    Route::middleware('role:super_admin,partner,manager')->group(function () {
+        Route::get('/billing', [BillingController::class, 'index'])->name('billing.index');
+        Route::get('/billing/create', [BillingController::class, 'create'])->name('billing.create');
+        Route::post('/billing', [BillingController::class, 'store'])->name('billing.store');
+        Route::get('/billing/{invoice}', [BillingController::class, 'show'])->name('billing.show');
+        Route::post('/billing/{invoice}/payments', [BillingController::class, 'recordPayment'])->name('billing.payments.store');
+        Route::post('/billing/{invoice}/razorpay-link', [BillingController::class, 'generatePaymentLink'])->name('billing.razorpay.link');
+        Route::post('/billing/{invoice}/razorpay-verify', [BillingController::class, 'verifyPaymentStatus'])->name('billing.razorpay.verify');
+        Route::get('/billing/{invoice}/pdf', [BillingController::class, 'downloadPdf'])->name('billing.pdf');
+        Route::delete('/billing/{invoice}', [BillingController::class, 'destroy'])->name('billing.destroy');
+    });
 
     // Employee & Staff Management
     Route::get('/staff', [StaffController::class, 'index'])->name('staff.index');
@@ -106,6 +121,7 @@ Route::middleware(['auth', 'role:super_admin,partner,manager,employee'])->group(
     Route::post('/tasks/{task}/comments', [TaskController::class, 'addComment'])->name('tasks.comments.store');
     Route::post('/tasks/{task}/attachments', [TaskController::class, 'addAttachment'])->name('tasks.attachments.store');
     Route::get('/tasks/{task}/attachments/{attachment}/download', [TaskController::class, 'downloadAttachment'])->name('tasks.attachments.download');
+    Route::post('/tasks/{task}/time-logs', [TaskController::class, 'logTime'])->name('tasks.time_logs.store');
     Route::delete('/tasks/{task}', [TaskController::class, 'destroy'])->name('tasks.destroy');
 
     // Client Communication
@@ -119,6 +135,11 @@ Route::middleware(['auth', 'role:super_admin,partner,manager,employee'])->group(
     // Firm Settings & Audit Logs (Super Admin / Partner)
     Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
     Route::post('/settings', [SettingController::class, 'update'])->name('settings.update');
+    Route::post('/settings/test-whatsapp', [SettingController::class, 'testWhatsApp'])->name('settings.test_whatsapp');
+    Route::post('/settings/test-email', [SettingController::class, 'testEmail'])->name('settings.test_email');
+    Route::post('/settings/test-razorpay', [SettingController::class, 'testRazorpay'])->name('settings.test_razorpay');
+    Route::post('/settings/cron-run', [SettingController::class, 'runCronNow'])->name('settings.cron_run');
+    Route::post('/settings/backup', [SettingController::class, 'downloadBackup'])->name('settings.backup');
 });
 
 // Isolated Client Portal
@@ -130,6 +151,8 @@ Route::prefix('portal')->name('portal.')->middleware(['auth', 'role:client'])->g
     Route::get('/documents/{document}/download', [ClientPortalController::class, 'downloadDocument'])->name('documents.download');
     Route::get('/filings', [ClientPortalController::class, 'filings'])->name('filings');
     Route::get('/invoices', [ClientPortalController::class, 'invoices'])->name('invoices');
+    Route::post('/invoices/{invoice}/pay', [ClientPortalController::class, 'generatePaymentLink'])->name('invoices.pay');
+    Route::post('/invoices/{invoice}/verify', [ClientPortalController::class, 'verifyInvoicePayment'])->name('invoices.verify');
     Route::get('/invoices/{invoice}/pdf', [ClientPortalController::class, 'downloadInvoicePdf'])->name('invoices.pdf');
     Route::get('/messages', [ClientPortalController::class, 'messages'])->name('messages');
     Route::post('/messages', [ClientPortalController::class, 'sendMessage'])->name('messages.send');

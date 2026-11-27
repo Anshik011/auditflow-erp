@@ -2,24 +2,28 @@
 
 namespace App\Services\WhatsApp;
 
+use App\Services\FirmConfigService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Integration-ready WhatsApp Business Cloud API provider.
- * Never fakes message delivery: requires valid WHATSAPP_* credentials to dispatch live messages.
+ * Reads credentials from FirmSetting first with .env fallback.
  */
 class MetaWhatsAppCloudService implements WhatsAppProviderInterface
 {
     public function isConfigured(): bool
     {
-        return (bool) config('services.whatsapp.enabled')
-            && ! empty(config('services.whatsapp.phone_number_id'))
-            && ! empty(config('services.whatsapp.access_token'));
+        $cfg = FirmConfigService::whatsapp();
+
+        return (bool) $cfg['enabled']
+            && ! empty($cfg['phone_number_id'])
+            && ! empty($cfg['access_token']);
     }
 
     public function sendTextMessage(string $recipientPhone, string $message): array
     {
+        $cfg = FirmConfigService::whatsapp();
         $normalizedPhone = preg_replace('/[^\d+]/', '', $recipientPhone) ?: '';
         $payload = [
             'messaging_product' => 'whatsapp',
@@ -52,13 +56,13 @@ class MetaWhatsAppCloudService implements WhatsAppProviderInterface
 
         $endpoint = sprintf(
             '%s/%s/%s/messages',
-            rtrim((string) config('services.whatsapp.base_url'), '/'),
-            config('services.whatsapp.api_version', 'v20.0'),
-            config('services.whatsapp.phone_number_id')
+            rtrim((string) $cfg['base_url'], '/'),
+            $cfg['api_version'] ?: 'v20.0',
+            $cfg['phone_number_id']
         );
 
         try {
-            $response = Http::withToken((string) config('services.whatsapp.access_token'))
+            $response = Http::withToken((string) $cfg['access_token'])
                 ->timeout(10)
                 ->post($endpoint, $payload);
 
@@ -89,4 +93,3 @@ class MetaWhatsAppCloudService implements WhatsAppProviderInterface
         }
     }
 }
-

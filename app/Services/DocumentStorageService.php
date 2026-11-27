@@ -94,4 +94,3 @@ class DocumentStorageService
         return $document;
     }
 }
-

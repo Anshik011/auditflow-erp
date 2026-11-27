@@ -30,6 +30,7 @@ class CommunicationService
         if ($channel === 'email') {
             if (! empty($client->email)) {
                 try {
+                    FirmConfigService::applyMailConfig();
                     Mail::to($client->email)->send(new ClientReminderMail(
                         $client,
                         $subject ?: 'Notification from Your CA Firm',
@@ -95,4 +96,3 @@ class CommunicationService
         return $comm;
     }
 }
-

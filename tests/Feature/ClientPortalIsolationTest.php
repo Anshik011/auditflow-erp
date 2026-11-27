@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\Audit;
 use App\Models\Client;
 use App\Models\Document;
 use App\Models\Invoice;
+use App\Models\Task;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -155,15 +157,15 @@ class ClientPortalIsolationTest extends TestCase
 
     public function test_employee_sees_only_assigned_projects_and_clients(): void
     {
-        $employee = User::where('email', 'employee@auditflow.in')->firstOrFail();
-        $partner = User::where('email', 'partner@auditflow.in')->firstOrFail();
+        $employee = User::where('email', 'employee@uptoware.com')->firstOrFail();
+        $partner = User::where('email', 'partner@uptoware.com')->firstOrFail();
 
         $assignedClient = Client::where('assigned_ca_id', $employee->id)->firstOrFail();
         $unassignedClient = Client::where('assigned_ca_id', '!=', $employee->id)
             ->whereDoesntHave('staff', fn ($q) => $q->where('users.id', $employee->id))
             ->firstOrFail();
 
-        $assignedTask = \App\Models\Task::create([
+        $assignedTask = Task::create([
             'title' => 'Assigned Employee Task',
             'client_id' => $assignedClient->id,
             'assigned_to' => $employee->id,
@@ -173,7 +175,7 @@ class ClientPortalIsolationTest extends TestCase
             'status' => 'in_progress',
         ]);
 
-        $unassignedTask = \App\Models\Task::create([
+        $unassignedTask = Task::create([
             'title' => 'Other Staff Task On Assigned Client',
             'client_id' => $assignedClient->id,
             'assigned_to' => $partner->id,
@@ -183,7 +185,7 @@ class ClientPortalIsolationTest extends TestCase
             'status' => 'todo',
         ]);
 
-        $assignedAudit = \App\Models\Audit::create([
+        $assignedAudit = Audit::create([
             'client_id' => $assignedClient->id,
             'title' => 'Employee Lead Audit',
             'audit_type' => 'internal_audit',
@@ -192,7 +194,7 @@ class ClientPortalIsolationTest extends TestCase
             'status' => 'in_progress',
         ]);
 
-        $unassignedAudit = \App\Models\Audit::create([
+        $unassignedAudit = Audit::create([
             'client_id' => $unassignedClient->id,
             'title' => 'Partner Only Statutory Audit',
             'audit_type' => 'statutory',
@@ -239,4 +241,3 @@ class ClientPortalIsolationTest extends TestCase
             ->assertForbidden();
     }
 }
-

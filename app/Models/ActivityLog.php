@@ -36,4 +36,3 @@ class ActivityLog extends Model
         return $this->morphTo();
     }
 }
-

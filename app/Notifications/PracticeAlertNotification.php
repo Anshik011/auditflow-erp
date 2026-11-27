@@ -31,4 +31,3 @@ class PracticeAlertNotification extends Notification
         ];
     }
 }
-

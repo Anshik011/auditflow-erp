@@ -28,6 +28,7 @@ class DashboardService
         $today = Carbon::today();
         $visibleClientIds = $this->clientAccess->visibleClientsQuery($user)->pluck('id');
         $isExecutive = $user->isAdminOrPartner();
+        $canViewFinancials = $user->isManagerOrAbove();
         $isEmployee = $user->role === User::ROLE_EMPLOYEE;
 
         $totalActiveClients = Client::whereIn('id', $visibleClientIds)->where('status', 'active')->count();
@@ -77,13 +78,13 @@ class DashboardService
             ->where('status', 'requested')
             ->count();
 
-        $outstandingFees = $isExecutive
+        $outstandingFees = $canViewFinancials
             ? (float) Invoice::whereIn('client_id', $visibleClientIds)
                 ->whereIn('status', ['unpaid', 'partially_paid', 'overdue'])
                 ->sum('balance_amount')
             : 0.0;
 
-        $monthlyRevenue = $isExecutive
+        $monthlyRevenue = $canViewFinancials
             ? (float) Payment::whereIn('client_id', $visibleClientIds)
                 ->whereBetween('payment_date', [$today->copy()->startOfMonth(), $today->copy()->endOfMonth()])
                 ->sum('amount')
@@ -140,6 +141,7 @@ class DashboardService
         return [
             'roleMeta' => $roleMeta,
             'isExecutive' => $isExecutive,
+            'canViewFinancials' => $canViewFinancials,
             'isEmployee' => $isEmployee,
             'kpis' => [
                 'active_clients' => $totalActiveClients,
@@ -161,7 +163,7 @@ class DashboardService
                 'active_staff' => $activeStaffCount,
             ],
             'charts' => [
-                'monthly_revenue' => $isExecutive ? $this->monthlyRevenueChart($visibleClientIds) : null,
+                'monthly_revenue' => $canViewFinancials ? $this->monthlyRevenueChart($visibleClientIds) : null,
                 'compliance_completion' => $this->complianceCompletionChart($visibleClientIds, $isEmployee ? $user->id : null),
                 'client_growth' => $isExecutive ? $this->clientGrowthChart($visibleClientIds) : null,
                 'employee_workload' => ! $isEmployee ? $this->employeeWorkloadChart() : null,

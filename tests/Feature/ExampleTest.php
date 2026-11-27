@@ -6,9 +6,13 @@ use Tests\TestCase;
 
 class ExampleTest extends TestCase
 {
-    public function test_root_redirects_to_login_and_login_loads(): void
+    public function test_public_landing_page_and_login_load(): void
     {
-        $this->get('/')->assertRedirect(route('login'));
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('Uptoware Audit')
+            ->assertSee('Try Live Demo');
+
         $this->get(route('login'))->assertOk();
     }
 }

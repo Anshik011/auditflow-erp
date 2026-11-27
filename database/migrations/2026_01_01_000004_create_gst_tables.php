@@ -46,4 +46,3 @@ return new class extends Migration
         Schema::dropIfExists('gst_return_types');
     }
 };
-

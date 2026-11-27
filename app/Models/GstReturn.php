@@ -61,4 +61,3 @@ class GstReturn extends Model
         return self::STATUSES[$this->status] ?? ucfirst(str_replace('_', ' ', $this->status));
     }
 }
-

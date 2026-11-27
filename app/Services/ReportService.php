@@ -10,6 +10,7 @@ use App\Models\Invoice;
 use App\Models\ItrFiling;
 use App\Models\Payment;
 use App\Models\Task;
+use App\Models\TaskTimeLog;
 use App\Models\TdsReturn;
 use App\Models\User;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -30,6 +31,8 @@ class ReportService
         'outstanding_invoices' => 'Outstanding Invoices Report',
         'monthly_revenue' => 'Monthly Revenue Report',
         'document_collection' => 'Document Collection Status Report',
+        'tally_export' => 'Tally-Ready Invoices & Receipts Export',
+        'client_profitability' => 'Client Profitability Report',
     ];
 
     public function build(string $type, ?string $fromDate = null, ?string $toDate = null): array
@@ -44,6 +47,8 @@ class ReportService
             'outstanding_invoices' => $this->outstandingInvoicesReport($fromDate, $toDate),
             'monthly_revenue' => $this->monthlyRevenueReport($fromDate, $toDate),
             'document_collection' => $this->documentCollectionReport($fromDate, $toDate),
+            'tally_export' => $this->tallyExportReport($fromDate, $toDate),
+            'client_profitability' => $this->clientProfitabilityReport($fromDate, $toDate),
             default => $this->clientComplianceReport(),
         };
     }
@@ -337,5 +342,119 @@ class ReportService
             ])->toArray(),
         ];
     }
-}
 
+    private function tallyExportReport(?string $fromDate, ?string $toDate): array
+    {
+        $invQ = Invoice::with('client');
+        $payQ = Payment::with(['client', 'invoice']);
+
+        if ($fromDate) {
+            $invQ->whereDate('invoice_date', '>=', $fromDate);
+            $payQ->whereDate('payment_date', '>=', $fromDate);
+        }
+        if ($toDate) {
+            $invQ->whereDate('invoice_date', '<=', $toDate);
+            $payQ->whereDate('payment_date', '<=', $toDate);
+        }
+
+        $rows = [];
+
+        foreach ($invQ->orderBy('invoice_date')->get() as $inv) {
+            $rows[] = [
+                $inv->invoice_date->format('Y-m-d'),
+                'Sales',
+                $inv->invoice_number,
+                $inv->client?->name ?? '—',
+                $inv->client?->gstin ?? 'Unregistered',
+                number_format((float) $inv->taxable_amount, 2, '.', ''),
+                number_format((float) $inv->cgst_amount, 2, '.', ''),
+                number_format((float) $inv->sgst_amount, 2, '.', ''),
+                number_format((float) $inv->igst_amount, 2, '.', ''),
+                number_format((float) $inv->total_amount, 2, '.', ''),
+                '0.00',
+                '',
+                '0.00',
+                '',
+                $inv->invoice_number,
+            ];
+        }
+
+        foreach ($payQ->orderBy('payment_date')->get() as $pay) {
+            $rows[] = [
+                $pay->payment_date->format('Y-m-d'),
+                'Receipt',
+                $pay->invoice?->invoice_number ?? ('RCPT-'.$pay->id),
+                $pay->client?->name ?? '—',
+                $pay->client?->gstin ?? 'Unregistered',
+                '0.00',
+                '0.00',
+                '0.00',
+                '0.00',
+                number_format((float) $pay->amount + (float) $pay->tds_deducted, 2, '.', ''),
+                number_format((float) $pay->amount, 2, '.', ''),
+                $pay->tds_section ?? '',
+                number_format((float) $pay->tds_deducted, 2, '.', ''),
+                Payment::MODES[$pay->payment_mode] ?? ucfirst($pay->payment_mode),
+                $pay->reference_number ?? '—',
+            ];
+        }
+
+        usort($rows, fn ($a, $b) => strcmp($a[0], $b[0]));
+
+        return [
+            'headers' => [
+                'Voucher Date', 'Voucher Type', 'Voucher No', 'Party Ledger Name', 'Party GSTIN',
+                'Taxable Value', 'CGST', 'SGST', 'IGST', 'Gross Amount',
+                'Cash Received', 'TDS Section', 'TDS Deducted', 'Payment Mode', 'Reference / Narration',
+            ],
+            'rows' => $rows,
+        ];
+    }
+
+    private function clientProfitabilityReport(?string $fromDate, ?string $toDate): array
+    {
+        $clients = Client::orderBy('name')->get();
+        $rows = [];
+
+        foreach ($clients as $client) {
+            $invQ = Invoice::where('client_id', $client->id);
+            $payQ = Payment::where('client_id', $client->id);
+            $logQ = TaskTimeLog::whereHas('task', fn ($q) => $q->where('client_id', $client->id));
+
+            if ($fromDate) {
+                $invQ->whereDate('invoice_date', '>=', $fromDate);
+                $payQ->whereDate('payment_date', '>=', $fromDate);
+                $logQ->whereDate('logged_date', '>=', $fromDate);
+            }
+            if ($toDate) {
+                $invQ->whereDate('invoice_date', '<=', $toDate);
+                $payQ->whereDate('payment_date', '<=', $toDate);
+                $logQ->whereDate('logged_date', '<=', $toDate);
+            }
+
+            $billed = (float) $invQ->sum('total_amount');
+            $collected = (float) $payQ->sum('amount') + (float) $payQ->sum('tds_deducted');
+            $totalMinutes = (int) (clone $logQ)->sum('minutes');
+            $billableMinutes = (int) (clone $logQ)->where('is_billable', true)->sum('minutes');
+
+            $totalHours = round($totalMinutes / 60, 2);
+            $billableHours = round($billableMinutes / 60, 2);
+            $effectiveRate = $totalHours > 0 ? round($billed / $totalHours, 2) : 0.0;
+
+            $rows[] = [
+                $client->client_code,
+                $client->name,
+                number_format($billed, 2, '.', ''),
+                number_format($collected, 2, '.', ''),
+                number_format($totalHours, 2, '.', ''),
+                number_format($billableHours, 2, '.', ''),
+                number_format($effectiveRate, 2, '.', ''),
+            ];
+        }
+
+        return [
+            'headers' => ['Client Code', 'Client Name', 'Billed Fees (INR)', 'Collected + TDS (INR)', 'Total Staff Hours', 'Billable Hours', 'Effective Rate / Hr (INR)'],
+            'rows' => $rows,
+        ];
+    }
+}

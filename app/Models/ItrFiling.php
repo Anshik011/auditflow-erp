@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ItrFiling extends Model
 {
     public const RETURN_TYPES = ['ITR-1', 'ITR-2', 'ITR-3', 'ITR-4', 'ITR-5', 'ITR-6', 'ITR-7'];
+
     public const CATEGORIES = ['Individual', 'HUF', 'Partnership Firm', 'LLP', 'Private Limited Company', 'Trust / AOP'];
 
     public const DOCUMENT_STATUSES = [
@@ -82,4 +83,3 @@ class ItrFiling extends Model
         return self::REFUND_STATUSES[$this->refund_status] ?? ucfirst($this->refund_status);
     }
 }
-

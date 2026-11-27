@@ -183,4 +183,3 @@ class GstReturnController extends Controller
         return array_values(array_map(fn ($label) => ['label' => $label, 'received' => false], $lines));
     }
 }
-

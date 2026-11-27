@@ -129,6 +129,30 @@
     </div>
 
     <div class="col-12">
+        <label class="form-label small fw-semibold">Recurring Retainer Billing</label>
+        <div class="border rounded p-3 bg-light row g-2 align-items-center">
+            <div class="col-md-4">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="is_recurring_retainer" value="1" id="chkRetainer" @checked(old('is_recurring_retainer', $client?->is_recurring_retainer ?? false))>
+                    <label class="form-check-label small fw-semibold" for="chkRetainer">Enable Recurring Retainer Invoice</label>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small mb-1">Retainer Amount (INR)</label>
+                <input type="number" step="0.01" min="0" name="retainer_amount" value="{{ old('retainer_amount', $client?->retainer_amount ?? '0') }}" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small mb-1">Billing Cycle</label>
+                <select name="billing_cycle" class="form-select form-select-sm">
+                    @foreach(\App\Models\Client::BILLING_CYCLES as $k => $v)
+                        <option value="{{ $k }}" @selected(old('billing_cycle', $client?->billing_cycle ?? 'none') === $k)>{{ $v }}</option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
         <label class="form-label small fw-semibold">Internal Notes</label>
         <textarea name="notes" rows="3" class="form-control">{{ old('notes', $client?->notes) }}</textarea>
     </div>

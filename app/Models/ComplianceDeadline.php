@@ -36,6 +36,7 @@ class ComplianceDeadline extends Model
         'priority',
         'description',
         'completed_at',
+        'last_reminded_at',
     ];
 
     protected function casts(): array
@@ -44,6 +45,7 @@ class ComplianceDeadline extends Model
             'due_date' => 'date',
             'reminder_date' => 'date',
             'completed_at' => 'datetime',
+            'last_reminded_at' => 'datetime',
         ];
     }
 
@@ -72,4 +74,3 @@ class ComplianceDeadline extends Model
         return self::STATUSES[$this->status] ?? ucfirst($this->status);
     }
 }
-

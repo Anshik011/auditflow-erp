@@ -92,6 +92,16 @@ class Task extends Model
         return $this->hasMany(TaskActivity::class)->latest();
     }
 
+    public function timeLogs(): HasMany
+    {
+        return $this->hasMany(TaskTimeLog::class)->latest('logged_date');
+    }
+
+    public function totalLoggedMinutes(): int
+    {
+        return (int) $this->timeLogs()->sum('minutes');
+    }
+
     public function statusLabel(): string
     {
         return self::STATUSES[$this->status] ?? ucfirst($this->status);
@@ -107,4 +117,3 @@ class Task extends Model
         return $this->status !== 'completed' && $this->due_date && $this->due_date->isPast();
     }
 }
-

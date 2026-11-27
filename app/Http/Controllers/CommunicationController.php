@@ -62,4 +62,3 @@ class CommunicationController extends Controller
         return back()->with($comm->status === 'failed' ? 'warning' : 'success', $flash);
     }
 }
-

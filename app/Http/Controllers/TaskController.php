@@ -7,6 +7,7 @@ use App\Models\Task;
 use App\Models\TaskActivity;
 use App\Models\TaskAttachment;
 use App\Models\TaskComment;
+use App\Models\TaskTimeLog;
 use App\Models\User;
 use App\Notifications\PracticeAlertNotification;
 use App\Services\ActivityLogger;
@@ -67,7 +68,7 @@ class TaskController extends Controller
     {
         abort_unless($this->clientAccess->canAccessTask($request->user(), $task), 403);
 
-        $task->load(['client', 'assignee', 'creator', 'approver', 'comments.user', 'attachments.user', 'activities.user']);
+        $task->load(['client', 'assignee', 'creator', 'approver', 'comments.user', 'attachments.user', 'activities.user', 'timeLogs.user']);
         $staff = User::staff()->active()->orderBy('name')->get();
         $clients = $this->clientAccess->visibleClientsQuery($request->user())->orderBy('name')->get();
 
@@ -87,7 +88,7 @@ class TaskController extends Controller
             'due_date' => ['nullable', 'date'],
         ]);
 
-        if (!empty($validated['client_id'])) {
+        if (! empty($validated['client_id'])) {
             $client = Client::findOrFail($validated['client_id']);
             abort_unless($this->clientAccess->canAccessClient($request->user(), $client), 403);
         }
@@ -254,6 +255,36 @@ class TaskController extends Controller
         return Storage::disk('local')->download($attachment->file_path, $attachment->original_filename);
     }
 
+    public function logTime(Request $request, Task $task): RedirectResponse
+    {
+        abort_unless($this->clientAccess->canAccessTask($request->user(), $task), 403);
+
+        $validated = $request->validate([
+            'minutes' => ['required', 'integer', 'min:1', 'max:1440'],
+            'logged_date' => ['required', 'date'],
+            'is_billable' => ['nullable', 'boolean'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $log = TaskTimeLog::create([
+            'task_id' => $task->id,
+            'user_id' => $request->user()->id,
+            'minutes' => $validated['minutes'],
+            'is_billable' => $request->boolean('is_billable', true),
+            'logged_date' => $validated['logged_date'],
+            'notes' => $validated['notes'] ?? null,
+        ]);
+
+        TaskActivity::create([
+            'task_id' => $task->id,
+            'user_id' => $request->user()->id,
+            'action' => 'time_logged',
+            'details' => "Logged {$log->minutes} mins".($log->is_billable ? ' (billable)' : ' (non-billable)'),
+        ]);
+
+        return back()->with('success', "Logged {$log->minutes} minute(s) on task.");
+    }
+
     public function destroy(Request $request, Task $task): RedirectResponse
     {
         abort_unless($this->clientAccess->canAccessTask($request->user(), $task), 403);
@@ -263,4 +294,3 @@ class TaskController extends Controller
         return redirect()->route('tasks.index')->with('success', 'Task deleted.');
     }
 }
-

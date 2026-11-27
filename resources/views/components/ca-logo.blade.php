@@ -17,7 +17,7 @@
     @if($showWordmark)
         <div class="lh-sm">
             <div class="fw-bold tracking-tight" style="color: #1e3a5f; font-size: 1.05rem; letter-spacing: -0.02em;">
-                AuditFlow <span class="fw-semibold" style="color: #0d9488;">ERP</span>
+                Uptoware <span class="fw-semibold" style="color: #0d9488;">Audit</span>
             </div>
             @if($subtitle)
                 <div class="text-muted" style="font-size: 0.7rem;">{{ $subtitle }}</div>

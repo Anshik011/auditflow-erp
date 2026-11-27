@@ -10,6 +10,7 @@ use App\Models\GstReturnType;
 use App\Models\Invoice;
 use App\Models\Task;
 use App\Models\User;
+use App\Services\ReportService;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -29,7 +30,7 @@ class CaPracticeWorkflowTest extends TestCase
 
     public function test_staff_and_admin_can_login_and_view_all_core_modules(): void
     {
-        $admin = User::where('email', 'admin@auditflow.in')->firstOrFail();
+        $admin = User::where('email', 'admin@uptoware.com')->firstOrFail();
 
         $this->post(route('login.submit'), [
             'email' => $admin->email,
@@ -65,7 +66,7 @@ class CaPracticeWorkflowTest extends TestCase
 
     public function test_client_crm_crud_and_profile_tabs(): void
     {
-        $partner = User::where('email', 'partner@auditflow.in')->firstOrFail();
+        $partner = User::where('email', 'partner@uptoware.com')->firstOrFail();
         $this->actingAs($partner);
 
         $response = $this->post(route('clients.store'), [
@@ -93,7 +94,7 @@ class CaPracticeWorkflowTest extends TestCase
 
     public function test_gst_itr_tds_and_configurable_calendar_workflows(): void
     {
-        $manager = User::where('email', 'manager@auditflow.in')->firstOrFail();
+        $manager = User::where('email', 'manager@uptoware.com')->firstOrFail();
         $client = Client::firstOrFail();
         $returnType = GstReturnType::firstOrFail();
         $rule = ComplianceRule::firstOrFail();
@@ -156,7 +157,7 @@ class CaPracticeWorkflowTest extends TestCase
 
     public function test_document_versioning_approval_rejection_and_secure_download(): void
     {
-        $employee = User::where('email', 'employee@auditflow.in')->firstOrFail();
+        $employee = User::where('email', 'employee@uptoware.com')->firstOrFail();
         $client = Client::firstOrFail();
         $this->actingAs($employee);
 
@@ -190,7 +191,7 @@ class CaPracticeWorkflowTest extends TestCase
 
     public function test_audit_checklist_progress_and_working_papers(): void
     {
-        $partner = User::where('email', 'partner@auditflow.in')->firstOrFail();
+        $partner = User::where('email', 'partner@uptoware.com')->firstOrFail();
         $audit = Audit::firstOrFail();
         $this->actingAs($partner);
 
@@ -219,15 +220,15 @@ class CaPracticeWorkflowTest extends TestCase
 
     public function test_billing_gst_calculation_payments_and_pdf_download(): void
     {
-        $partner = User::where('email', 'partner@auditflow.in')->firstOrFail();
+        $partner = User::where('email', 'partner@uptoware.com')->firstOrFail();
         $client = Client::firstOrFail();
         $this->actingAs($partner);
 
         $this->post(route('billing.store'), [
             'invoice_number' => 'CA-INV-TEST-0099',
             'client_id' => $client->id,
-            'invoice_date' => '2026-11-11',
-            'due_date' => '2026-11-26',
+            'invoice_date' => now()->toDateString(),
+            'due_date' => now()->addDays(15)->toDateString(),
             'tax_mode' => 'cgst_sgst',
             'discount_amount' => 1000,
             'cgst_rate' => 9,
@@ -260,7 +261,7 @@ class CaPracticeWorkflowTest extends TestCase
 
     public function test_tasks_kanban_status_transition_and_whatsapp_not_configured_honesty(): void
     {
-        $manager = User::where('email', 'manager@auditflow.in')->firstOrFail();
+        $manager = User::where('email', 'manager@uptoware.com')->firstOrFail();
         $task = Task::firstOrFail();
         $client = Client::firstOrFail();
         $this->actingAs($manager);
@@ -286,10 +287,10 @@ class CaPracticeWorkflowTest extends TestCase
 
     public function test_reports_csv_export_works_for_all_report_types(): void
     {
-        $admin = User::where('email', 'admin@auditflow.in')->firstOrFail();
+        $admin = User::where('email', 'admin@uptoware.com')->firstOrFail();
         $this->actingAs($admin);
 
-        foreach (array_keys(\App\Services\ReportService::TYPES) as $type) {
+        foreach (array_keys(ReportService::TYPES) as $type) {
             $res = $this->get(route('reports.export_csv', ['type' => $type]));
             $res->assertOk();
             $this->assertStringContainsString('text/csv', (string) $res->headers->get('content-type'));
@@ -298,8 +299,8 @@ class CaPracticeWorkflowTest extends TestCase
 
     public function test_staff_management_settings_and_role_permissions(): void
     {
-        $admin = User::where('email', 'admin@auditflow.in')->firstOrFail();
-        $employee = User::where('email', 'employee@auditflow.in')->firstOrFail();
+        $admin = User::where('email', 'admin@uptoware.com')->firstOrFail();
+        $employee = User::where('email', 'employee@uptoware.com')->firstOrFail();
         $client = Client::firstOrFail();
 
         // Employee cannot access admin-only settings
@@ -308,14 +309,14 @@ class CaPracticeWorkflowTest extends TestCase
         // Admin can add staff and update firm settings
         $this->actingAs($admin)->post(route('staff.store'), [
             'name' => 'Karan Joshi',
-            'email' => 'karan@auditflow.in',
+            'email' => 'karan@uptoware.com',
             'role' => User::ROLE_EMPLOYEE,
             'password' => 'Secret@123',
             'designation' => 'Tax Associate',
             'department' => 'GST',
         ])->assertRedirect();
 
-        $this->assertDatabaseHas('users', ['email' => 'karan@auditflow.in', 'role' => User::ROLE_EMPLOYEE]);
+        $this->assertDatabaseHas('users', ['email' => 'karan@uptoware.com', 'role' => User::ROLE_EMPLOYEE]);
 
         $this->actingAs($admin)->post(route('settings.update'), [
             'firm_name' => 'CAVault & Associates LLP',
@@ -339,10 +340,10 @@ class CaPracticeWorkflowTest extends TestCase
 
     public function test_each_staff_role_sees_role_specific_dashboard(): void
     {
-        $admin = User::where('email', 'admin@auditflow.in')->firstOrFail();
-        $partner = User::where('email', 'partner@auditflow.in')->firstOrFail();
-        $manager = User::where('email', 'manager@auditflow.in')->firstOrFail();
-        $employee = User::where('email', 'employee@auditflow.in')->firstOrFail();
+        $admin = User::where('email', 'admin@uptoware.com')->firstOrFail();
+        $partner = User::where('email', 'partner@uptoware.com')->firstOrFail();
+        $manager = User::where('email', 'manager@uptoware.com')->firstOrFail();
+        $employee = User::where('email', 'employee@uptoware.com')->firstOrFail();
 
         $this->actingAs($admin)
             ->get(route('dashboard'))
@@ -363,8 +364,8 @@ class CaPracticeWorkflowTest extends TestCase
             ->assertOk()
             ->assertSee('Operations &amp; Team Delivery Dashboard', false)
             ->assertSee('Tasks Under Review')
-            ->assertDontSee('Monthly Revenue')
-            ->assertDontSee('Outstanding Fees');
+            ->assertSee('Monthly Revenue')
+            ->assertSee('Outstanding Fees');
 
         $this->actingAs($employee)
             ->get(route('dashboard'))

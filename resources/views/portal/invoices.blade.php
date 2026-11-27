@@ -11,7 +11,7 @@
 <div class="ca-card overflow-hidden">
     <div class="table-responsive">
         <table class="table table-hover mb-0">
-            <thead><tr><th>Invoice #</th><th>Date</th><th>Due Date</th><th>Total</th><th>Paid</th><th>Balance</th><th>Status</th><th>PDF</th></tr></thead>
+            <thead><tr><th>Invoice #</th><th>Date</th><th>Due Date</th><th>Total</th><th>Paid</th><th>Balance</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
             <tbody>
                 @forelse($invoices as $inv)
                     <tr>
@@ -22,7 +22,29 @@
                         <td class="text-success">₹{{ number_format((float) $inv->paid_amount, 2) }}</td>
                         <td class="fw-semibold text-danger">₹{{ number_format((float) $inv->balance_amount, 2) }}</td>
                         <td><x-status-badge :status="$inv->status" :label="$inv->statusLabel()" /></td>
-                        <td><a href="{{ route('portal.invoices.pdf', $inv) }}" class="btn btn-sm btn-light border"><i class="bi bi-file-pdf text-danger me-1"></i>Download</a></td>
+                        <td class="text-end text-nowrap">
+                            @if((float) $inv->balance_amount > 0)
+                                @if($inv->razorpay_payment_link_url)
+                                    <a href="{{ $inv->razorpay_payment_link_url }}" target="_blank" class="btn btn-sm btn-success me-1">
+                                        <i class="bi bi-lightning-charge me-1"></i>Pay Now
+                                    </a>
+                                    <form action="{{ route('portal.invoices.verify', $inv) }}" method="POST" class="d-inline">
+                                        @csrf
+                                        <button type="submit" class="btn btn-sm btn-outline-primary me-1" title="Verify Payment Status">
+                                            <i class="bi bi-arrow-repeat"></i> Verify
+                                        </button>
+                                    </form>
+                                @elseif(!empty($razorpayEnabled))
+                                    <form action="{{ route('portal.invoices.pay', $inv) }}" method="POST" class="d-inline">
+                                        @csrf
+                                        <button type="submit" class="btn btn-sm btn-success me-1">
+                                            <i class="bi bi-lightning-charge me-1"></i>Pay Now
+                                        </button>
+                                    </form>
+                                @endif
+                            @endif
+                            <a href="{{ route('portal.invoices.pdf', $inv) }}" class="btn btn-sm btn-light border"><i class="bi bi-file-pdf text-danger me-1"></i>PDF</a>
+                        </td>
                     </tr>
                 @empty
                     <tr><td colspan="8" class="text-muted text-center py-4">No invoices available.</td></tr>

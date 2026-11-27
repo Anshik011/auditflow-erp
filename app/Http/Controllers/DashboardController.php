@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Client;
 use App\Models\Invoice;
-use App\Models\Task;
 use App\Services\ClientAccessService;
 use App\Services\DashboardService;
 use Illuminate\Http\RedirectResponse;
@@ -91,4 +90,3 @@ class DashboardController extends Controller
         return back()->with('success', 'All notifications marked as read.');
     }
 }
-
